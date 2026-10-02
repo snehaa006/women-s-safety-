@@ -13,6 +13,9 @@ export default defineConfig({
     },
   },
   build: {
+    // MapLibre (about 1 MB, 280 KB gzipped) is the one chunk above the default 500 kB limit. It
+    // loads only on screens with a map.
+    chunkSizeWarningLimit: 1100,
     rolldownOptions: {
       output: {
         // Big libraries change rarely: separate chunks stay cached across app releases.
@@ -30,7 +33,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./src/test/setup.tsx'],
     css: false,
   },
 })

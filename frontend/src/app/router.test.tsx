@@ -1,9 +1,14 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { admin, citizen, createFakeAuthClient, officer } from '@/test/fake-auth-client'
 import { renderRoute } from '@/test/render-route'
+
+vi.mock('@/features/sos/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/sos/api')>()),
+  viewLiveLink: vi.fn(async () => null),
+}))
 
 describe('route guards', () => {
   it('sends signed-out visitors to sign-in and remembers where they were going', async () => {
@@ -49,9 +54,11 @@ describe('dynamic routes', () => {
   })
 
   it('serves the trusted-contact live link without signing in', async () => {
-    renderRoute('/t/abc123', createFakeAuthClient())
-    expect(await screen.findByRole('heading', { name: 'Live safety link' })).toBeInTheDocument()
-    expect(screen.getByText('abc123')).toBeInTheDocument()
+    const { router } = renderRoute('/t/abc123', createFakeAuthClient())
+    expect(
+      await screen.findByRole('heading', { name: 'This link has expired' }),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/t/abc123')
   })
 
   it('shows a not-found page for unknown paths', async () => {

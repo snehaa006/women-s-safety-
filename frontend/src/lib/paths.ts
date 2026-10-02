@@ -1,0 +1,35 @@
+/** Builders for dynamic routes, so links and the route tree never drift apart. */
+export const paths = {
+  home: '/',
+  login: '/login',
+  signup: '/signup',
+  contactLive: (token: string) => `/t/${encodeURIComponent(token)}`,
+  verify: (sha256?: string) => (sha256 ? `/verify/${sha256}` : '/verify'),
+  app: {
+    home: '/app',
+    sos: (incidentId: string) => `/app/sos/${incidentId}`,
+    incident: (incidentId: string) => `/app/incidents/${incidentId}`,
+    map: '/app/map',
+    report: '/app/report',
+    reports: '/app/reports',
+    complaint: (complaintId: string) => `/app/reports/${complaintId}`,
+    vault: '/app/vault',
+    vaultItem: (itemId: string) => `/app/vault/${itemId}`,
+    circle: '/app/circle',
+    contact: (contactId: string) => `/app/circle/${contactId}`,
+    settings: '/app/settings',
+  },
+  console: {
+    live: '/console',
+    incident: (incidentId: string) => `/console/incidents/${incidentId}`,
+    complaints: '/console/complaints',
+    complaint: (complaintId: string) => `/console/complaints/${complaintId}`,
+    cases: '/console/cases',
+    case: (caseId: string) => `/console/cases/${caseId}`,
+    evidence: (caseId: string, evidenceId: string) =>
+      `/console/cases/${caseId}/evidence/${evidenceId}`,
+    map: '/console/map',
+    reviews: '/console/reviews',
+    admin: (section = 'stations') => `/console/admin/${section}`,
+  },
+} as const

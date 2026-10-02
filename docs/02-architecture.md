@@ -68,6 +68,8 @@ The brief said "Render or Hugging Face, whichever works". Free tiers as of **Oct
 
 **Decision:** the **Python backend runs on Render**. Hugging Face becomes an *optional model host* that the backend calls (see §9). Docker Spaces created before July 2026 keep working, so a team that already has one, or pays for PRO, could host there. Render is still the simpler default.
 
+> **Open alternative (decision D1):** run the backend on **Supabase Edge Functions** instead of Render. They answer without Render's one-minute cold start and Supabase adds realtime and cron, but they run TypeScript (Deno), not Python, with 2 s of CPU and 150 s of wall-clock time per request on the free plan. See [04-roadmap.md §4](04-roadmap.md#4-decisions).
+
 **Free-tier caveats and how we handle them:**
 
 | Caveat | Mitigation |
@@ -90,7 +92,7 @@ The brief said "Render or Hugging Face, whichever works". Free tiers as of **Oct
 | API types | `openapi-typescript` + `openapi-fetch` | Types are generated from FastAPI's OpenAPI schema. No hand-copied DTOs. |
 | Maps | MapLibre GL (`react-map-gl`) + OpenFreeMap tiles + `h3-js` | Free vector tiles. Risk heatmap drawn as H3 hexagons. |
 | **Backend** | Python 3.12, **FastAPI**, Pydantic v2 | Async throughout. OpenAPI docs at `/docs`. |
-| ORM & migrations | SQLAlchemy 2 (async, asyncpg) + GeoAlchemy2, Alembic | |
+| Schema & migrations | **SQL migrations in `supabase/migrations`** (Supabase CLI layout) | One schema source whichever backend runtime wins decision D1. Rules that must never be skipped (ledger, roles) live in Postgres itself. |
 | Tooling | `uv`, ruff, mypy, pytest | |
 | **Database** | Supabase Postgres + PostGIS | Spatial queries: nearest station, jurisdiction, route buffers. |
 | Files | Supabase Storage (private bucket) | Browser uploads directly with short-lived signed URLs. |
@@ -152,7 +154,7 @@ backend/
         jobs.py          # job handlers owned by this module
       circle/ dispatch/ notify/ complaints/ triage/ authority/
       vault/ custody/ geo/ journeys/ devices/ oversight/ fakecall/ identity/
-  migrations/            # Alembic
+  # schema lives in supabase/migrations (SQL), shared by every runtime
   tests/
   pyproject.toml
 ai-service/              # optional model service (HF ZeroGPU Gradio Space)
@@ -273,7 +275,7 @@ erDiagram
 | | `workflow_instances` | `definition_id`, `subject_type`, `subject_id`, `current_state` |
 | | `signatures` | `subject_type`, `subject_id`, `signer_id`, `purpose`, `payload_hash`, `method` (webauthn, ed25519), `signature` |
 | | `custody_transfers` | `item_id`, `from_party`, `to_party`, `location`, `purpose`, `initiated_at`, `accepted_at`, `verified_hash`, `status` |
-| ledger | `ledger_entries` | `seq`, `occurred_at`, `recorded_at`, `actor_id`, `actor_role`, `device_id`, `action`, `subject_type`, `subject_id`, `location`, `payload`, `payload_hash`, `prev_hash`, `entry_hash`, `server_sig` |
+| ledger | `ledger_entries` | `seq`, `occurred_at`, `recorded_at`, `actor_id`, `actor_role`, `device_id`, `action`, `subject_type`, `subject_id`, `lat`, `lng`, `accuracy_m`, `payload`, `payload_hash`, `prev_hash`, `entry_hash` |
 | | `ledger_anchors` | `from_seq`, `to_seq`, `merkle_root`, `method` (ots, evm, replica), `receipt`, `anchored_at` |
 | geo | `safe_points` | `name`, `category`, `point`, `source` (osm, admin), `verified`, `open_hours` |
 | | `zone_reports` | `reporter_id`, `point`, `h3_cell`, `type` (poor_lighting, isolated, harassment, no_transport), `at`, `status` |
@@ -300,16 +302,17 @@ Individual GPS pings are **not** recorded one by one. Each minute of pings becom
 | `actor_id`, `actor_role`, `device_id` | Who did it, and from which device |
 | `action`, `subject_type`, `subject_id` | What happened, and to what |
 | `occurred_at`, `recorded_at` | When it happened, and when the server stored it |
-| `location` | Where (when known) |
-| `payload_hash` | SHA-256 of the canonical payload (for example the evidence file hash plus metadata) |
+| `lat`, `lng`, `accuracy_m` | Where (when known) |
+| `payload_hash` | SHA-256 of the payload's `jsonb` text (for example the evidence file hash plus metadata) |
 | `prev_hash` | `entry_hash` of the previous entry |
-| `entry_hash` | SHA-256 over the canonical JSON (RFC 8785) of all fields above |
-| `server_sig` | Ed25519 signature of `entry_hash` by the platform key |
+| `entry_hash` | SHA-256 over all fields above joined with `\|`, timestamps in UTC with microseconds (`ledger_entry_material()`) |
+
+A platform signature over each `entry_hash` (Ed25519) is planned for Phase 4, alongside officer signatures.
 
 **How tampering is prevented and detected:**
 
-1. **Append-only.** The application's database role may only `INSERT` and `SELECT` on this table, and a trigger rejects `UPDATE` and `DELETE`. Corrections are new entries that reference the original (I2: "append a new corrective event").
-2. **Hash chain.** Changing any past entry breaks every later `prev_hash` link. A nightly job re-verifies the whole chain.
+1. **Append-only, enforced by Postgres** (`supabase/migrations/*_ledger.sql`). A `BEFORE INSERT` trigger assigns `seq`, `recorded_at` and both hashes under an advisory lock, so callers cannot choose them. Triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, even from the service role. Browsers cannot write at all: entries come from `ledger_append()`, which takes the actor from the session, called by domain functions or the backend. Corrections are new entries that reference the original (I2: "append a new corrective event").
+2. **Hash chain.** Changing any past entry breaks every later `prev_hash` link. `ledger_verify()` recomputes every hash and reports the first broken entry; a nightly job runs it.
 3. **Anchoring.** Every 10 minutes the worker computes a Merkle root over the new entries and publishes **only that root**, never personal data, to outside witnesses:
    - **OpenTimestamps**: free, and anchors into the Bitcoin blockchain.
    - Optional for the demo: a tiny smart contract on a public EVM testnet (for example Polygon Amoy).
@@ -623,7 +626,7 @@ flowchart LR
 ```
 
 - **Environments:** local (Docker Compose with Postgres + PostGIS, or the Supabase CLI) and production/demo. Add staging when a pilot starts.
-- **Infrastructure as code:** `render.yaml` blueprint for the API and the static site. SQL migrations through Alembic, run as a release step.
+- **Infrastructure as code:** `render.yaml` blueprint for the API and the static site. SQL migrations in `supabase/migrations`, applied with `supabase db push`.
 - **Observability:** structured JSON logs with request IDs, Sentry free tier for frontend and backend errors, `/healthz`, and job-queue lag.
 - **Key metrics:** time from SOS trigger to first alert sent, time to acknowledgement, SLA breaches, failed deliveries.
 - **Testing:**

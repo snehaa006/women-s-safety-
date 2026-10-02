@@ -63,20 +63,29 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** a deployed skeleton that every feature builds on.
 
-**Scope**
+**Status (October 2026):** the parts that are the same whichever backend runtime wins D1 are built. The rest waits on D1 and on a Supabase project.
 
-- Monorepo with `frontend/`, `backend/`, `ai-service/` (placeholder) and `docs/`. ESLint + Prettier, ruff + mypy, pre-commit hooks, GitHub Actions CI.
-- **Frontend shell:** Vite + React + TS + Tailwind + shadcn/ui. React Router route trees for Public, Citizen, Console and Contact, with lazy loading, role guards and a 404 page. Light and dark themes with severity color tokens.
-- **Auth and roles:** Supabase Auth sign-up and sign-in (citizens sign themselves up; staff accounts are created by an admin). Tables `profiles`, `organizations` and `memberships`. FastAPI JWT verification plus an RBAC dependency. Redirect by role after sign-in.
-- **Platform services:** ledger (`append`, `verify_chain`), durable job queue with an in-process worker, WebSocket hub with tickets, notification adapter skeleton (in-app and email), idempotency middleware, problem+json errors, injectable clock.
-- **Seed script:** one demo city with 3 police stations (jurisdiction polygons), 1 district control room, officers, a supervisor and 2 citizens.
-- **Deploy:** API on Render, frontend on a Render Static Site, a Supabase project, an uptime pinger and `render.yaml`.
+**Built**
+
+- **Frontend shell** (`frontend/`): Vite + React 19 + TypeScript, Tailwind v4, shadcn/ui components, React Router 8 route trees for Public, Citizen (`/app`), Console (`/console`) and Contact (`/t/:token`) with lazy-loaded screens, role guards, dynamic segments and a 404 page. Supabase Auth sign-in and sign-up, redirect by role, light and dark themes with severity tokens. Later screens are placeholders that already receive their route params. SOS controls are visibly disabled and point to 112 until Phase 1.
+- **Database foundation** (`supabase/`): SQL migrations for `profiles`, `organizations` and `memberships`, a sign-up trigger that creates citizen profiles, `admin_set_role()` (the only way to grant staff roles, ledgered), row-level security, and the hash-chained ledger enforced by Postgres triggers with `ledger_verify()`. Seed data: a district control room, 3 police stations and a college security desk.
+- **Tests and CI:** 16 frontend tests (guards, dynamic routes, sign-in) and 14 database tests (RLS, role escalation, chain validity, tamper detection, append-only, concurrent writers). GitHub Actions runs lint, formatting, type-check, tests and build on every PR.
+
+**Waiting on D1 (backend runtime)**
+
+- Backend service skeleton: FastAPI on Render, or Supabase Edge Functions.
+- Durable job worker and realtime channel (our own, or Supabase Cron + Realtime).
+- Notification adapter skeleton, idempotency, problem+json errors.
+
+**Waiting on a Supabase project**
+
+- Apply migrations, create demo staff accounts, deploy the frontend, add an uptime check.
 
 **Done when**
 
-- [ ] A citizen and an officer can sign in on the deployed URLs and land on their own home screens. A citizen opening `/console` is blocked.
-- [ ] Tests prove the ledger works: changing any stored entry makes `verify_chain` fail.
-- [ ] CI runs lint, type-check and tests on every PR.
+- [ ] A citizen and an officer can sign in on the deployed URLs and land on their own home screens. A citizen opening `/console` is blocked. *(Works locally in tests; needs the hosted project.)*
+- [x] Tests prove the ledger works: changing any stored entry makes `ledger_verify()` fail.
+- [x] CI runs lint, type-check and tests on every PR.
 
 ---
 
@@ -275,7 +284,7 @@ Recommended defaults are listed first. **Please confirm or change these before P
 
 | # | Decision | Recommended default | Alternative |
 |---|---|---|---|
-| D1 | Backend hosting | **Render** free web service, kept warm by a pinger for demos | Hugging Face Docker Space (needs PRO, $9/month) |
+| D1 | Backend runtime | **Open.** Render free web service (Python FastAPI, about 1 min cold start after 15 min idle) | Supabase Edge Functions (TypeScript, no long cold start, built-in realtime and cron). Hugging Face Docker Spaces need PRO ($9/month). |
 | D2 | Database & files | **Supabase** Postgres + PostGIS + Storage | Neon + Cloudflare R2 |
 | D3 | Auth | **Supabase Auth**, with JWTs verified in FastAPI | Auth built into FastAPI |
 | D4 | Frontend hosting | **Render Static Site** (one platform) | Vercel (preview URL per PR) |

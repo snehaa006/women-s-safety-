@@ -1,105 +1,26 @@
-// Database tests: run the migrations against a fresh Postgres database and check the rules the
-// rest of the system depends on. Needs DATABASE_URL pointing at a superuser connection, e.g.
-//   DATABASE_URL=postgres://postgres@localhost:5432/postgres npm test
+// Identity, roles and the ledger: the rules every later feature depends on.
 
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { after, before, describe, it } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { describe, it } from 'node:test'
 
 import pg from 'pg'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const supabaseDir = join(here, '..')
-const adminUrl = process.env.DATABASE_URL
-if (!adminUrl) throw new Error('Set DATABASE_URL to a superuser connection string')
+import { asServiceRole, asUser, createUser, db, setupTestDatabase, testUrl } from './helpers.js'
 
-const testDb = `ws_test_${process.pid}`
-const testUrl = (() => {
-  const url = new URL(adminUrl)
-  url.pathname = `/${testDb}`
-  return url.toString()
-})()
-
-let db // superuser connection to the test database
-
-function sqlFile(...parts) {
-  return readFileSync(join(supabaseDir, ...parts), 'utf8')
-}
-
-/** Runs fn inside a transaction as a signed-in Supabase user (role authenticated). Rolls back. */
-async function asUser(userId, fn) {
-  const client = new pg.Client({ connectionString: testUrl })
-  await client.connect()
-  try {
-    await client.query('begin')
-    await client.query('set local role authenticated')
-    await client.query(`select set_config('request.jwt.claim.sub', $1, true)`, [userId])
-    return await fn(client)
-  } finally {
-    await client.query('rollback').catch(() => {})
-    await client.end()
-  }
-}
-
-/** Runs fn as the service role (what an Edge Function or backend with the secret key uses). */
-async function asServiceRole(fn) {
-  const client = new pg.Client({ connectionString: testUrl })
-  await client.connect()
-  try {
-    await client.query('set role service_role')
-    return await fn(client)
-  } finally {
-    await client.end()
-  }
-}
-
-async function createUser(fullName) {
-  const id = randomUUID()
-  await db.query(`insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`, [
-    id,
-    `${id}@example.test`,
-    { full_name: fullName },
-  ])
-  return id
-}
+setupTestDatabase()
 
 async function verify() {
   const { rows } = await db.query('select * from public.ledger_verify()')
   return rows[0]
 }
 
-before(async () => {
-  const admin = new pg.Client({ connectionString: adminUrl })
-  await admin.connect()
-  await admin.query(`drop database if exists ${testDb}`)
-  await admin.query(`create database ${testDb}`)
-  await admin.end()
-
-  db = new pg.Client({ connectionString: testUrl })
-  await db.connect()
-  await db.query(sqlFile('tests', 'supabase-stub.sql'))
-  const migrations = readdirSync(join(supabaseDir, 'migrations')).filter((f) => f.endsWith('.sql'))
-  for (const file of migrations.sort()) {
-    await db.query(sqlFile('migrations', file))
-  }
-  await db.query(sqlFile('seed.sql'))
-})
-
-after(async () => {
-  await db?.end()
-  const admin = new pg.Client({ connectionString: adminUrl })
-  await admin.connect()
-  await admin.query(`drop database if exists ${testDb} with (force)`)
-  await admin.end()
-})
-
 describe('sign-up', () => {
   it('creates a citizen profile and records it in the ledger', async () => {
     const id = await createUser('Priya Sharma')
-    const { rows } = await db.query('select full_name, role from public.profiles where id = $1', [id])
+    const { rows } = await db.query('select full_name, role from public.profiles where id = $1', [
+      id,
+    ])
     assert.deepEqual(rows[0], { full_name: 'Priya Sharma', role: 'citizen' })
 
     const entry = await db.query(
@@ -107,7 +28,9 @@ describe('sign-up', () => {
        where subject_type = 'profile' and subject_id = $1`,
       [id],
     )
-    assert.deepEqual(entry.rows, [{ action: 'account.created', actor_id: id, actor_role: 'citizen' }])
+    assert.deepEqual(entry.rows, [
+      { action: 'account.created', actor_id: id, actor_role: 'citizen' },
+    ])
   })
 })
 
@@ -124,7 +47,9 @@ describe('profiles', () => {
       )
 
       await c.query(`update public.profiles set full_name = 'Priya S' where id = $1`, [priya])
-      const other = await c.query(`update public.profiles set full_name = 'x' where id = $1`, [meera])
+      const other = await c.query(`update public.profiles set full_name = 'x' where id = $1`, [
+        meera,
+      ])
       assert.equal(other.rowCount, 0)
     })
   })
@@ -211,7 +136,32 @@ describe('public API surface', () => {
       where n.nspname = 'public' and p.prosecdef order by p.proname`)
     assert.deepEqual(
       rows.map((r) => r.proname),
-      ['admin_set_role', 'ledger_verify'],
+      [
+        'admin_set_role',
+        'create_sos',
+        'device_event',
+        'incident_timeline',
+        'ledger_verify',
+        'record_location',
+        'register_device',
+        'reset_device_secret',
+        'resolve_incident',
+        'respond_to_share_link',
+        'set_sos_pins',
+        'sos_pin_status',
+        'view_share_link',
+      ],
+    )
+  })
+
+  it('lets anonymous visitors call only the live-link and device RPCs', async () => {
+    const { rows } = await db.query(`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname in ('public', 'private') and has_function_privilege('anon', p.oid, 'execute')
+      order by p.proname`)
+    assert.deepEqual(
+      rows.map((r) => r.proname),
+      ['device_event', 'respond_to_share_link', 'view_share_link'],
     )
   })
 })
@@ -249,7 +199,10 @@ describe('ledger', () => {
         c.query(`update public.ledger_entries set payload = '{}' where seq = 1`),
         /append-only/,
       )
-      await assert.rejects(c.query('delete from public.ledger_entries where seq = 1'), /append-only/)
+      await assert.rejects(
+        c.query('delete from public.ledger_entries where seq = 1'),
+        /append-only/,
+      )
     })
     await assert.rejects(db.query('truncate public.ledger_entries'), /append-only/)
   })

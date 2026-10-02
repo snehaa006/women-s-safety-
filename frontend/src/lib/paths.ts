@@ -18,6 +18,8 @@ export const paths = {
     circle: '/app/circle',
     contact: (contactId: string) => `/app/circle/${contactId}`,
     settings: '/app/settings',
+    devices: '/app/devices',
+    simulator: '/app/devices/simulator',
   },
   console: {
     live: '/console',

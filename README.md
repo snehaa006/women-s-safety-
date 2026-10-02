@@ -2,7 +2,7 @@
 
 A web platform (React PWA on a Supabase backend) that **gets help to a woman in danger within seconds** and **makes the response accountable**. Every alert, action and piece of evidence is time-stamped, hashed and recorded in a tamper-evident ledger.
 
-> **Status:** Phase 0 is built. The database runs on the Supabase project `women's safety`, and the frontend deploys to Vercel. Phase 1 (trusted contacts, silent SOS, live location) is next.
+> **Status:** Phase 1 part A is built: trusted circle, hold-to-send SOS, live location, a live link for contacts, SOS and duress PINs, the incident timeline, and a **virtual wearable** that stands in for the IoT keychain. The database runs on the Supabase project `women's safety`; the frontend deploys to Vercel. Next: automatic alerts to the circle and the offline queue.
 
 ## Design docs
 
@@ -12,6 +12,7 @@ A web platform (React PWA on a Supabase backend) that **gets help to a woman in 
 | [02 · System architecture](docs/02-architecture.md) | Container diagram, hosting decision, tech stack, backend modules, data model, integrity ledger, escalation engine, AI, geo, security, route map, deployment |
 | [03 · Workflows](docs/03-workflows.md) | Sequence and state diagrams for SOS, escalation, complaints, accountability lock, evidence, custody, journeys, fake call, wearable |
 | [04 · Roadmap](docs/04-roadmap.md) | Phases P0–P9 with scope, screens and "done when" checklists, the MVP cut line, and decisions to confirm |
+| [05 · Wearable protocol](docs/05-device-protocol.md) | The device API, signing, event types, the virtual wearable and command-line simulator, demo recipes, firmware notes |
 
 ## Stack
 
@@ -27,7 +28,8 @@ A web platform (React PWA on a Supabase backend) that **gets help to a woman in 
 
 ```text
 frontend/     React PWA: citizen app, authority console, contact live view
-supabase/     SQL migrations, Edge Functions (from Phase 1), seed data, database tests
+supabase/     SQL migrations, seed data, database tests (Edge Functions arrive with alerts)
+tools/        device-simulator.mjs: the wearable from the command line
 docs/         Design docs (the source of truth)
 .github/      CI: frontend checks and database tests on every PR
 ```
@@ -57,6 +59,23 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 ```
 
 **Supabase project** (`fwhhgiajzrzsjeduenaj`): with the [Supabase CLI](https://supabase.com/docs/guides/local-development), `supabase link --project-ref fwhhgiajzrzsjeduenaj` then `supabase db push` applies new migrations. Locally, `supabase start` and `supabase db reset` also load `supabase/seed.sql`. To make someone staff, have them sign up, then run `select public.admin_set_role('<user id>', 'officer');` in the SQL editor.
+
+## Mock data: the virtual wearable
+
+There is no IoT hardware yet. In the app, open **Wearables → Open the virtual wearable**
+(`/app/devices/simulator`) and pair it. It has the keychain's single button (hold 3 seconds for
+SOS; one or two clicks are gestures), a **Run demo** that sends an SOS and then walks a route
+through Connaught Place, New Delhi, plus battery, heartbeat and tamper events. Every event is
+HMAC-signed and goes to the same endpoint the ESP32 will call, so the rest of the app can't tell
+the difference.
+
+From a terminal, the same thing (keys from the simulator's "For developers" panel):
+
+```bash
+DEVICE_ID=... DEVICE_SECRET=... node tools/device-simulator.mjs demo
+```
+
+Details and demo recipes: [docs/05-device-protocol.md](docs/05-device-protocol.md).
 
 ## Deploy
 

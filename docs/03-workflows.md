@@ -448,14 +448,14 @@ From I3-C§3 and I2§1.
 sequenceDiagram
   autonumber
   participant D as Wearable
-  participant API as Device function
+  participant API as device_event RPC
   participant W as Cron + notify function
   actor C as Contacts and station
   D->>D: Long press 3 s, haptic buzz
   D->>D: Get GNSS fix, or last known position
-  D->>API: POST /functions/v1/device-events type sos with lat, lng, battery + HMAC
+  D->>API: POST /rest/v1/rpc/device_event, type sos with lat, lng, battery + HMAC
   API->>API: Verify signature, timestamp window, nonce
-  API-->>D: 202 Accepted, device buzzes twice
+  API-->>D: 200 accepted, device buzzes twice
   API->>W: Same dispatch flow as an app SOS
   W->>C: Alerts with live link
   Note over D,API: No data network? The device sends an SMS with a GPS link to contacts
@@ -464,6 +464,7 @@ sequenceDiagram
 **Device protocol**
 
 - Pairing assigns `device_id` plus a per-device secret.
-- Each request carries `HMAC-SHA256(secret, timestamp + nonce + body)`.
-- Requests outside a 60 s window, or with a reused nonce, are rejected.
+- Each request carries the body text (with `ts` and `nonce` inside) and `HMAC-SHA256(secret, body)`.
+- Requests more than 5 minutes off server time, or with a reused nonce, are rejected.
+- Until the hardware exists, the **virtual wearable** (`/app/devices/simulator`) and `tools/device-simulator.mjs` send the same requests. Full spec: [05 · Wearable protocol](05-device-protocol.md).
 - **Low-battery mode** stretches the heartbeat interval but always keeps the SOS path available.

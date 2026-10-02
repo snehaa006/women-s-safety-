@@ -16,6 +16,11 @@ begin
 end
 $$;
 
+-- Supabase installs extensions such as pgcrypto into their own schema.
+create schema extensions;
+create extension pgcrypto with schema extensions;
+grant usage on schema extensions to anon, authenticated, service_role;
+
 create schema auth;
 
 create table auth.users (

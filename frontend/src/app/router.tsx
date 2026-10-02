@@ -41,19 +41,7 @@ export const routes: RouteObject[] = [
       {
         path: 't/:token',
         Component: ContactLayout,
-        children: [
-          {
-            index: true,
-            element: (
-              <PlaceholderPage
-                title="Live safety link"
-                phase="P1"
-                module="M3"
-                description="A trusted contact sees live location and status here, and can say they're responding."
-              />
-            ),
-          },
-        ],
+        children: [{ index: true, lazy: () => import('@/routes/contact/live') }],
       },
       {
         path: 'app',
@@ -64,28 +52,8 @@ export const routes: RouteObject[] = [
         ),
         children: [
           { index: true, lazy: () => import('@/routes/citizen/home') },
-          {
-            path: 'sos/:incidentId',
-            element: (
-              <PlaceholderPage
-                title="SOS active"
-                phase="P1"
-                module="M2"
-                description="Who has seen the alert, live map, nearby safe points, and I'm safe."
-              />
-            ),
-          },
-          {
-            path: 'incidents/:incidentId',
-            element: (
-              <PlaceholderPage
-                title="Incident timeline"
-                phase="P1"
-                module="M2"
-                description="Every step of a past incident, read from the ledger."
-              />
-            ),
-          },
+          { path: 'sos/:incidentId', lazy: () => import('@/routes/citizen/sos') },
+          { path: 'incidents/:incidentId', lazy: () => import('@/routes/citizen/incident') },
           {
             path: 'map',
             element: (
@@ -130,27 +98,10 @@ export const routes: RouteObject[] = [
               />
             ),
           },
-          {
-            path: 'circle/:contactId?',
-            element: (
-              <PlaceholderPage
-                title="Trusted circle"
-                phase="P1"
-                module="M1"
-                description="The people who get your SOS, in the order they're alerted."
-              />
-            ),
-          },
-          {
-            path: 'settings',
-            element: (
-              <PlaceholderPage
-                title="Settings"
-                phase="P1"
-                description="SOS PIN, duress PIN, passkeys, privacy and notifications."
-              />
-            ),
-          },
+          { path: 'circle/:contactId?', lazy: () => import('@/routes/citizen/circle') },
+          { path: 'settings', lazy: () => import('@/routes/citizen/settings') },
+          { path: 'devices', lazy: () => import('@/routes/citizen/devices') },
+          { path: 'devices/simulator', lazy: () => import('@/routes/citizen/simulator') },
         ],
       },
       {

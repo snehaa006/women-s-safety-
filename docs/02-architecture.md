@@ -47,7 +47,7 @@ flowchart LR
   PG -->|broadcast changes| RT
   RT -->|WebSocket| C
   RT -->|WebSocket| A
-  D -->|HMAC-signed HTTPS| EF
+  D -->|HMAC-signed RPC| API
   CR --> PG
   PG -->|queued jobs via pg_net| EF
   EF --> EXT
@@ -151,9 +151,8 @@ supabase/
   migrations/            # SQL: tables, RLS, RPC functions, triggers (one file per change)
   functions/             # Edge Functions (TypeScript, Deno)
     notify/              # sends push, email, SMS for queued alerts
-    device-events/       # wearable webhook, HMAC-verified
     triage/              # AI scoring for complaints (Phase 3)
-    _shared/             # shared helpers: Supabase client, CORS, HMAC
+    _shared/             # shared helpers: Supabase client, CORS
   tests/                 # database tests on plain Postgres (node:test)
   seed.sql               # demo stations
   config.toml
@@ -597,7 +596,7 @@ frontend/src/
 - **Edge Functions** (`/functions/v1/<name>`) handle anything that needs secrets or outside services.
 - **Types:** `supabase gen types typescript` generates the client types from the schema.
 - **Auth:** supabase-js sends the user's JWT automatically.
-  **Devices:** `X-Device-Id` + `X-Timestamp` + `X-Nonce` + `X-Signature` (HMAC-SHA256 over timestamp, nonce and body) to `/functions/v1/device-events`. Requests outside a 60 s window or with a reused nonce are rejected.
+  **Devices:** `POST /rest/v1/rpc/device_event` with only the publishable key. The body text carries a timestamp and nonce and is signed with HMAC-SHA256 using the device secret; Postgres verifies the signature itself, so no Edge Function sits in the path. Requests more than 5 minutes off or with a reused nonce are rejected. Full spec: [05 · Wearable protocol](05-device-protocol.md).
 - **Idempotency:** RPCs that create records take a client-generated id (`p_client_id`, unique). A retry on a flaky network returns the existing record instead of a duplicate.
 - **Errors:** SQL functions raise errors with stable codes and plain messages. For example, a skipped workflow state lists the missing requirements.
 - **Times:** ISO-8601 in UTC; the UI shows local time.
@@ -607,7 +606,7 @@ Key calls by phase:
 | Phase | Calls |
 |---|---|
 | P0 | `profiles` (own row), `organizations`, `rpc admin_set_role`, `rpc ledger_verify` |
-| P1 | `trusted_contacts`, `rpc create_sos`, `rpc record_location`, `rpc resolve_incident`, `rpc view_share_link`, `rpc ack_share_link`, `functions/v1/device-events`, `functions/v1/notify` |
+| P1 | `trusted_contacts`, `rpc create_sos`, `rpc record_location`, `rpc resolve_incident`, `rpc set_sos_pins`, `rpc sos_pin_status`, `rpc incident_timeline`, `rpc view_share_link`, `rpc respond_to_share_link`, `rpc register_device`, `rpc reset_device_secret`, `rpc device_event`; next: `functions/v1/notify` |
 | P2 | `rpc acknowledge_incident`, `rpc dispatch_unit`, `escalation_policies` (admin) |
 | P3 | `rpc submit_complaint`, `rpc acknowledge_complaint`, `rpc set_complaint_severity`, `functions/v1/triage` |
 | P4 | `rpc register_evidence`, Storage upload, `functions/v1/verify-evidence`, `rpc transition_case`, `rpc sign_evidence`, `rpc start_custody_transfer`, `rpc accept_custody_transfer`, `rpc lookup_hash` |

@@ -88,6 +88,18 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** the core safety promise. Press SOS, and the right people see you live within seconds.
 
+**Status (October 2026):** part A is built and live on the Supabase project; part B is next.
+
+**Built (part A)**
+
+- **Database** (`20261002161421_circle_sos_devices.sql`): trusted contacts (up to 10, RLS per owner), incidents (one active per person, idempotent by client id), location pings (sealed into the ledger once a minute as a hashed batch), live links with 144-bit tokens that expire 24 h after the SOS ends, responders, SOS and duress PINs (bcrypt, five wrong tries lock for 10 minutes), and the wearable API: devices, per-device secrets, and `device_event()`, which verifies HMAC signatures, timestamps and nonces inside Postgres.
+- **Citizen app:** hold-to-send SOS (1.5 s hold, 3 s cancel countdown, "Send now"), live SOS screen (streams location every 5 s, map, who's responding, send the link by WhatsApp, SMS to the circle, copy or share, call 112), "I'm safe" with PIN or duress PIN, the incident timeline from the ledger, trusted circle with alert order, Settings for name, phone and PINs, and Wearables.
+- **Live link** `/t/:token` for contacts without an account: status, map, battery, call her or 112, "I'm responding", and a warning when she cancelled with the duress PIN.
+- **Mock IoT:** the virtual wearable at `/app/devices/simulator` (hold 3 s for SOS, gestures, demo walk through Connaught Place, battery, heartbeat, tamper) and `tools/device-simulator.mjs`, both sending the exact requests the ESP32 will send. See [05 · Wearable protocol](05-device-protocol.md).
+- **Tests:** 49 database tests and 39 frontend tests, a browser run of the virtual wearable, and a live smoke test on the hosted project inside a rolled-back transaction.
+
+**Next (part B):** automatic alerts to the circle (a `jobs` row per contact, sent by the `notify` Edge Function by email, Web Push or Telegram; needs a provider key), the offline queue, Realtime instead of 5-second polling, and nearby safe points.
+
 **Scope**
 
 - **Circle (M1):** add, edit and reorder contacts. Choose channels per contact. Invite contacts who already have accounts.
@@ -99,16 +111,16 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 - **Nearby safe points (basic):** OSM import for the demo city. The nearest police station and hospital appear on the SOS screen.
 - **Wearable simulator:** virtual keychain at `/app/devices/simulator`. Its long press calls the real device API with HMAC.
 
-**Screens:** `/app`, `/app/circle`, `/app/circle/:contactId`, `/app/sos/:incidentId`, `/app/incidents/:incidentId`, `/app/devices/simulator`, `/app/settings`, `/t/:token`
+**Screens:** `/app`, `/app/circle`, `/app/circle/:contactId`, `/app/sos/:incidentId`, `/app/incidents/:incidentId`, `/app/devices`, `/app/devices/simulator`, `/app/settings`, `/t/:token`
 
-**Done when**
+**Done when** *(checked items are covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] Holding SOS sends contacts a push or email with the live link within 5 s. The map moves as the citizen walks.
-- [ ] A contact taps "I'm responding" and the citizen sees it instantly.
-- [ ] "I'm safe" needs the PIN. The duress PIN shows "cancelled" while the alert stays active.
-- [ ] In airplane mode the SOS is queued, the SMS fallback opens prefilled, and the SOS is delivered once back online.
-- [ ] The simulator's long press creates an SOS exactly like the app button.
-- [ ] Every step appears on the incident timeline.
+- [ ] Holding SOS sends contacts a push or email with the live link within 5 s. The map moves as the citizen walks. *(The map moves. Sending the link is one tap for now; automatic alerts are part B.)*
+- [x] A contact taps "I'm responding" and the citizen sees it within 5 s.
+- [x] "I'm safe" needs the PIN. The duress PIN shows "cancelled" while the alert stays active.
+- [ ] In airplane mode the SOS is queued, the SMS fallback opens prefilled, and the SOS is delivered once back online. *(Part B.)*
+- [x] The simulator's long press creates an SOS exactly like the app button.
+- [x] Every step appears on the incident timeline.
 
 ---
 

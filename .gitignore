@@ -3,6 +3,8 @@ dist/
 .env
 .env.*
 !.env.example
+# Public Supabase URL + publishable key for production builds (safe to commit).
+!frontend/.env.production
 .DS_Store
 # Supabase CLI local state
 supabase/.branches

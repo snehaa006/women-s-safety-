@@ -57,3 +57,14 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 ```
 
 **Supabase project** (`fwhhgiajzrzsjeduenaj`): with the [Supabase CLI](https://supabase.com/docs/guides/local-development), `supabase link --project-ref fwhhgiajzrzsjeduenaj` then `supabase db push` applies new migrations. Locally, `supabase start` and `supabase db reset` also load `supabase/seed.sql`. To make someone staff, have them sign up, then run `select public.admin_set_role('<user id>', 'officer');` in the SQL editor.
+
+## Deploy
+
+**Frontend (Vercel):** in Vercel, choose **Add New → Project**, import `snehaa006/women-s-safety-`, set **Root Directory** to `frontend`, and deploy. Vite is detected automatically; `frontend/vercel.json` handles routing and caching; `frontend/.env.production` holds the public Supabase URL and key, so no environment variables are needed. Vercel deploys `main` to production and every other branch as a preview.
+
+**Supabase Auth settings** (dashboard → Authentication), needed once:
+
+1. **Site URL** and **Redirect URLs**: the Vercel URL (plus `http://localhost:5173` for local development).
+2. Email: the built-in sender only reaches the project's team members. For the demo, turn off **Confirm email**, or add custom SMTP (for example Resend).
+
+**First admin:** sign up in the app, then run `select public.admin_set_role('<your user id>', 'admin');` in the Supabase SQL editor.

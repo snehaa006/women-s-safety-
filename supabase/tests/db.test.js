@@ -204,13 +204,25 @@ describe('organizations', () => {
   })
 })
 
+describe('public API surface', () => {
+  it('exposes only the deliberate security-definer RPCs', async () => {
+    const { rows } = await db.query(`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prosecdef order by p.proname`)
+    assert.deepEqual(
+      rows.map((r) => r.proname),
+      ['admin_set_role', 'ledger_verify'],
+    )
+  })
+})
+
 describe('ledger', () => {
   it('chains entries and verifies cleanly', async () => {
     const userId = await createUser('Chain Tester')
     await asServiceRole(async (c) => {
       for (const action of ['sos.triggered', 'alert.sent', 'alert.acknowledged']) {
         await c.query(
-          `select public.ledger_append($1, 'incident', $2, $3, p_lat => 28.6139, p_lng => 77.2090, p_actor_id => $4)`,
+          `select private.ledger_append($1, 'incident', $2, $3, p_lat => 28.6139, p_lng => 77.2090, p_actor_id => $4)`,
           [action, randomUUID(), { note: action }, userId],
         )
       }
@@ -246,7 +258,7 @@ describe('ledger', () => {
     const priya = await createUser('Priya')
     await asUser(priya, async (c) => {
       await assert.rejects(
-        c.query(`select public.ledger_append('sos.triggered', 'incident', gen_random_uuid())`),
+        c.query(`select private.ledger_append('sos.triggered', 'incident', gen_random_uuid())`),
         /permission denied/,
       )
     })
@@ -268,7 +280,7 @@ describe('ledger', () => {
     await db.query(`
       create function public.test_append_as(p_claimed uuid) returns uuid
       language sql security definer set search_path = '' as $$
-        select (public.ledger_append('test.event', 'profile', p_claimed, p_actor_id => p_claimed)).actor_id
+        select (private.ledger_append('test.event', 'profile', p_claimed, p_actor_id => p_claimed)).actor_id
       $$;
       grant execute on function public.test_append_as to authenticated;
     `)
@@ -294,7 +306,7 @@ describe('ledger', () => {
   it('stays a valid chain under concurrent writers', async () => {
     const writers = Array.from({ length: 8 }, (_, i) =>
       asServiceRole((c) =>
-        c.query(`select public.ledger_append('load.test', 'incident', gen_random_uuid(), $1)`, [
+        c.query(`select private.ledger_append('load.test', 'incident', gen_random_uuid(), $1)`, [
           { writer: i },
         ]),
       ),

@@ -26,7 +26,7 @@ create index ledger_entries_subject_idx on public.ledger_entries (subject_type, 
 create index ledger_entries_actor_idx on public.ledger_entries (actor_id, seq);
 
 comment on table public.ledger_entries is
-  'Append-only hash chain. entry_hash covers every field plus prev_hash; see ledger_entry_hash().';
+  'Append-only hash chain. entry_hash covers every field plus prev_hash; see ledger_entry_material().';
 
 -- The exact bytes that get hashed. Timestamps are rendered in UTC with microseconds so any
 -- verifier, in any language, can rebuild the same string from a row.

@@ -138,6 +138,8 @@ end;
 $$;
 
 -- Row level security ---------------------------------------------------------------------------
+-- auth.uid() and role checks are wrapped in (select ...) so Postgres evaluates them once per
+-- query instead of once per row, and each table has one policy per action.
 
 alter table public.profiles enable row level security;
 alter table public.organizations enable row level security;
@@ -145,48 +147,65 @@ alter table public.memberships enable row level security;
 
 -- Profiles: people see and edit their own. Admins see everyone. Officers do not get a blanket
 -- read of citizen profiles: confidential reporting depends on that.
-create policy "Read own profile" on public.profiles
+create policy "Read own profile, admins read all" on public.profiles
   for select to authenticated
-  using (id = auth.uid());
-
-create policy "Admins read all profiles" on public.profiles
-  for select to authenticated
-  using (public.has_role(array['admin']::public.app_role[]));
+  using (
+    id = (select auth.uid())
+    or (select public.has_role(array['admin']::public.app_role[]))
+  );
 
 create policy "Update own profile" on public.profiles
   for update to authenticated
-  using (id = auth.uid())
-  with check (id = auth.uid());
+  using (id = (select auth.uid()))
+  with check (id = (select auth.uid()));
 
 -- Organizations: names and types are not secret; only admins change them.
 create policy "Signed-in users read organizations" on public.organizations
   for select to authenticated
   using (true);
 
-create policy "Admins manage organizations" on public.organizations
-  for all to authenticated
-  using (public.has_role(array['admin']::public.app_role[]))
-  with check (public.has_role(array['admin']::public.app_role[]));
+create policy "Admins add organizations" on public.organizations
+  for insert to authenticated
+  with check ((select public.has_role(array['admin']::public.app_role[])));
 
--- Memberships: staff see their own; admins manage all.
-create policy "Read own memberships" on public.memberships
+create policy "Admins edit organizations" on public.organizations
+  for update to authenticated
+  using ((select public.has_role(array['admin']::public.app_role[])))
+  with check ((select public.has_role(array['admin']::public.app_role[])));
+
+create policy "Admins remove organizations" on public.organizations
+  for delete to authenticated
+  using ((select public.has_role(array['admin']::public.app_role[])));
+
+-- Memberships: staff see their own; admins see and manage all.
+create policy "Read own memberships, admins read all" on public.memberships
   for select to authenticated
-  using (user_id = auth.uid());
+  using (
+    user_id = (select auth.uid())
+    or (select public.has_role(array['admin']::public.app_role[]))
+  );
 
-create policy "Admins manage memberships" on public.memberships
-  for all to authenticated
-  using (public.has_role(array['admin']::public.app_role[]))
-  with check (public.has_role(array['admin']::public.app_role[]));
+create policy "Admins add memberships" on public.memberships
+  for insert to authenticated
+  with check ((select public.has_role(array['admin']::public.app_role[])));
+
+create policy "Admins edit memberships" on public.memberships
+  for update to authenticated
+  using ((select public.has_role(array['admin']::public.app_role[])))
+  with check ((select public.has_role(array['admin']::public.app_role[])));
+
+create policy "Admins remove memberships" on public.memberships
+  for delete to authenticated
+  using ((select public.has_role(array['admin']::public.app_role[])));
 
 -- Ledger: admins and oversight read everything; everyone reads entries they authored.
--- Modules add policies for the subjects they own (for example a citizen's own incident).
-create policy "Oversight reads the ledger" on public.ledger_entries
+-- Modules extend this for the subjects they own (for example a citizen's own incident).
+create policy "Read own ledger entries, oversight reads all" on public.ledger_entries
   for select to authenticated
-  using (public.has_role(array['admin', 'oversight']::public.app_role[]));
-
-create policy "Read own ledger entries" on public.ledger_entries
-  for select to authenticated
-  using (actor_id = auth.uid());
+  using (
+    actor_id = (select auth.uid())
+    or (select public.has_role(array['admin', 'oversight']::public.app_role[]))
+  );
 
 -- Privileges ------------------------------------------------------------------------------------
 

@@ -2,7 +2,7 @@
 
 A web platform (React PWA on a Supabase backend) that **gets help to a woman in danger within seconds** and **makes the response accountable**. Every alert, action and piece of evidence is time-stamped, hashed and recorded in a tamper-evident ledger.
 
-> **Status:** Phase 0 in progress. The frontend shell and the database foundation are built and tested. The backend runtime (decision D1 in the roadmap) is still open.
+> **Status:** Phase 0 is built. The database runs on the Supabase project `women's safety`, and the frontend deploys to Vercel. Phase 1 (trusted contacts, silent SOS, live location) is next.
 
 ## Design docs
 
@@ -18,21 +18,21 @@ A web platform (React PWA on a Supabase backend) that **gets help to a woman in 
 | Layer | Choice |
 |---|---|
 | Frontend | React + TypeScript (Vite), shadcn/ui + Tailwind, React Router (dynamic routes), TanStack Query, MapLibre, PWA |
-| Backend | Postgres rules and SQL migrations. Service layer: Python FastAPI or TypeScript Edge Functions (decision D1). |
+| Backend | Supabase-native: business rules, RLS and the ledger in Postgres (RPC functions), Edge Functions (TypeScript) for secrets and outside APIs, Realtime, Cron |
 | Data | Supabase: Postgres + PostGIS, Storage, Auth |
 | AI | Rules engine + speech-to-text + triage model (Claude API or a Hugging Face ZeroGPU Space) |
-| Hosting | Supabase (database, files, sign-in). Backend runtime: Render or Supabase Edge Functions (decision D1). |
+| Hosting | Vercel (frontend), Supabase (database, API, functions, files, sign-in) |
 
 ## Repository layout
 
 ```text
 frontend/     React PWA: citizen app, authority console, contact live view
-supabase/     SQL migrations, seed data and database tests
+supabase/     SQL migrations, Edge Functions (from Phase 1), seed data, database tests
 docs/         Design docs (the source of truth)
 .github/      CI: frontend checks and database tests on every PR
 ```
 
-Planned: a backend service (decision D1), `ai-service/` for the AI model, and `firmware/` for the ESP32 wearable (Phase 8).
+Planned: `firmware/` for the ESP32 wearable (Phase 8).
 
 ## Run it locally
 
@@ -41,12 +41,12 @@ Planned: a backend service (decision D1), `ai-service/` for the AI model, and `f
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local   # add your Supabase URL and publishable key
+cp .env.example .env.local   # public URL and key of the shared Supabase project
 npm run dev                  # http://localhost:5173
 npm test                     # unit and routing tests
 ```
 
-Without Supabase keys the app still runs. Sign-in shows a "not set up" notice.
+Without the env file the app still runs; sign-in shows a "not set up" notice.
 
 **Database tests** need any Postgres 16+ you can connect to as a superuser:
 
@@ -56,4 +56,4 @@ npm install
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 ```
 
-**Supabase project:** with the [Supabase CLI](https://supabase.com/docs/guides/local-development), `supabase link --project-ref <ref>` then `supabase db push` applies the migrations. Locally, `supabase start` and `supabase db reset` also load `supabase/seed.sql`. To make someone staff, have them sign up, then run `select public.admin_set_role('<user id>', 'officer');` in the SQL editor.
+**Supabase project** (`fwhhgiajzrzsjeduenaj`): with the [Supabase CLI](https://supabase.com/docs/guides/local-development), `supabase link --project-ref fwhhgiajzrzsjeduenaj` then `supabase db push` applies new migrations. Locally, `supabase start` and `supabase db reset` also load `supabase/seed.sql`. To make someone staff, have them sign up, then run `select public.admin_set_role('<user id>', 'officer');` in the SQL editor.

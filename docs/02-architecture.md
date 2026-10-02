@@ -7,76 +7,82 @@
 
 ## 1. At a glance
 
-**Style:** a *modular monolith*. One FastAPI application contains every module, with a durable job worker in the same process. A separate AI model service is optional. The React PWA talks to the API over REST and WebSockets. Postgres (with PostGIS) holds all data, the ledger and the job queue. Evidence files live in private object storage.
+**Style: Supabase-native.** Postgres *is* the core of the backend. Tables, row-level security (RLS) and SQL functions hold the business rules, so the browser talks to the database through Supabase's API with no app server in between. Code that needs secrets or outside services (sending alerts, AI, the wearable's webhook) runs in **Supabase Edge Functions** (TypeScript). **Supabase Realtime** pushes live updates, and **Supabase Cron** runs the timers. The React PWA is served from **Vercel**'s CDN.
 
-**Why a modular monolith:**
+**Why this shape:**
 
-- A small team ships one deployable, which fits free-tier hosting.
-- A single database transaction can **write the record, append the ledger entry and enqueue the follow-up job** together. That atomicity is the heart of the accountability promise.
-- Module boundaries are strict (one folder per module, no reaching into another module's tables), so notifications or AI can be split out later without a rewrite.
+- **Fastest SOS path.** The browser makes one call (`rpc('create_sos')`) and Postgres writes the incident, the ledger entry and the follow-up job in a single transaction. There is no server to wake up and no extra network hop.
+- **Rules live next to the data.** Every caller (app, console, Edge Function, even the SQL editor) goes through the same RLS policies and functions, so nothing can skip the ledger or a role check.
+- **One backend platform.** It fits the free tier, and migrations and Edge Functions deploy through the connected Supabase project.
 
 ```mermaid
 flowchart LR
   subgraph Clients
-    C["Citizen app<br/>React PWA, mobile-first"]
-    A["Authority console<br/>React, desktop-first"]
-    T["Trusted contact<br/>secure live link"]
+    C["Citizen app<br/>React PWA"]
+    A["Authority console<br/>React"]
+    T["Trusted contact<br/>live link"]
     D["Wearable<br/>ESP32, BLE + LTE"]
   end
 
-  subgraph Render["Render (Python)"]
-    API["FastAPI API<br/>REST + WebSocket"]
-    W["Job worker<br/>timers, escalations,<br/>notifications, anchoring"]
-  end
+  V["Vercel CDN<br/>serves the React app"]
 
   subgraph Supabase
-    PG[("Postgres + PostGIS<br/>data, ledger, job queue")]
-    S3[("Storage<br/>private evidence bucket")]
-    AU["Auth<br/>issues JWTs"]
+    API["Data API<br/>tables + RPC functions,<br/>checked by RLS"]
+    PG[("Postgres + PostGIS<br/>data, rules, ledger, jobs")]
+    RT["Realtime<br/>live location, board updates"]
+    EF["Edge Functions<br/>TypeScript: alerts, AI,<br/>device webhook"]
+    CR["Cron<br/>escalation tick every few seconds"]
+    ST[("Storage<br/>private evidence")]
+    AU["Auth<br/>sign-in, JWTs"]
   end
 
-  AI["AI provider<br/>speech-to-text + triage model"]
-  EXT["External services<br/>Web Push, email, SMS/WhatsApp,<br/>map tiles, routing, OSM data"]
+  EXT["Outside services<br/>Web Push, email, SMS,<br/>AI models, maps"]
 
-  C -->|HTTPS + WSS| API
-  A -->|HTTPS + WSS| API
-  T -->|HTTPS + WSS| API
-  D -->|HTTPS, HMAC-signed| API
-  C <-->|Web Bluetooth| D
+  V -.->|loads| C
+  V -.->|loads| A
+  C -->|queries + RPC| API
+  A -->|queries + RPC| API
+  T -->|link-token RPC| API
+  API --> PG
+  PG -->|broadcast changes| RT
+  RT -->|WebSocket| C
+  RT -->|WebSocket| A
+  D -->|HMAC-signed HTTPS| EF
+  CR --> PG
+  PG -->|queued jobs via pg_net| EF
+  EF --> EXT
+  EF --> PG
+  C -->|upload, RLS-checked| ST
   C -->|sign in| AU
   A -->|sign in| AU
-  C -->|direct upload, signed URL| S3
-  API -->|verify JWT| AU
-  API --> PG
-  API -->|signed URLs| S3
-  W --> PG
-  W --> AI
-  W --> EXT
 ```
 
 ---
 
-## 2. Hosting: Render or Hugging Face?
+## 2. Hosting decision
 
-The brief said "Render or Hugging Face, whichever works". Free tiers as of **October 2026**:
+**Decided in October 2026:** the backend runs entirely on **Supabase**, and the frontend is a static site on **Vercel**.
 
-| | Render (free web service) | Hugging Face Spaces |
-|---|---|---|
-| Host a Python API | ✅ Free | ❌ Since July 2026, new Docker Spaces need a paid PRO plan ($9/month). Free accounts can host up to 2 Gradio Spaces on ZeroGPU only. |
-| Sleep behaviour | Spins down after 15 min without traffic. Waking takes about 1 min. | Not applicable on the free plan. |
-| Good for | The main API and worker | ML models: Whisper and a classifier on a ZeroGPU Gradio Space (free quota: 5 GPU-minutes/day) |
+| | **Supabase only (chosen)** | Cloudflare Workers + Supabase DB | Python FastAPI on Render | Hugging Face Spaces |
+|---|---|---|---|---|
+| SOS write path | Browser → Postgres RPC | Browser → Worker → Postgres | Browser → FastAPI → Postgres | n/a |
+| Idle wake-up | None for RPC calls; Edge Functions start quickly | None | About 1 min after 15 min idle (free tier) | New Docker Spaces need PRO ($9/month) since July 2026 |
+| Live updates and timers | Built in (Realtime, Cron) | Durable Objects (a strong fit) | Build our own | n/a |
+| Backend platforms | 1 | 2 | 2 | n/a |
+| Language | SQL + TypeScript | TypeScript | Python | Python |
 
-**Decision:** the **Python backend runs on Render**. Hugging Face becomes an *optional model host* that the backend calls (see §9). Docker Spaces created before July 2026 keep working, so a team that already has one, or pays for PRO, could host there. Render is still the simpler default.
+**Kept in reserve:** Cloudflare Workers with Durable Objects if realtime or timer load outgrows Supabase; Cloudflare Workers AI (Whisper) for speech-to-text, called from an Edge Function; Cloudflare R2 if evidence outgrows Supabase Storage; a Hugging Face ZeroGPU Space for custom models.
 
-> **Open alternative (decision D1):** run the backend on **Supabase Edge Functions** instead of Render. They answer without Render's one-minute cold start and Supabase adds realtime and cron, but they run TypeScript (Deno), not Python, with 2 s of CPU and 150 s of wall-clock time per request on the free plan. See [04-roadmap.md §4](04-roadmap.md#4-decisions).
+**Free-tier limits that matter (Supabase):**
 
-**Free-tier caveats and how we handle them:**
-
-| Caveat | Mitigation |
+| Limit | What we do |
 |---|---|
-| Render cold start of about 1 min, which is unacceptable for a real SOS | For demos, an uptime pinger hits `/healthz` every 5 min. One always-awake service fits in Render's 750 free instance-hours/month. For a pilot, switch to an always-on paid instance. |
-| Render's free Postgres expires after 30 days | Use **Supabase** Postgres instead: 500 MB database, 1 GB file storage, 50k monthly active users on the free plan. Free projects pause after 1 week without activity, so keep the project active or upgrade. |
-| Background workers are not part of the free tier | The worker runs **inside the API process**. Jobs are stored in Postgres, so a restart or sleep never loses a timer: overdue jobs run on wake. Split into a separate worker service once on a paid plan. |
+| 500 MB database, 1 GB file storage, 50k monthly active users | Plenty for a demo. Upgrade before a pilot. |
+| Edge Functions: 500,000 calls/month, 2 s CPU and 150 s per call | Keep heavy work (AI) in outside services; functions mostly wait on I/O. |
+| Projects pause after 1 week without activity | Keep the project active, or upgrade for a pilot. |
+| Built-in email only reaches the project's team members | Before real users sign up, add custom SMTP (for example Resend) or turn off email confirmation for the demo. |
+
+**Region:** the project runs in Seoul (`ap-northeast-2`). Users in India would get lower latency from Mumbai (`ap-south-1`). The project is new, so moving means creating a Mumbai project and re-applying the migrations.
 
 ---
 
@@ -84,30 +90,32 @@ The brief said "Render or Hugging Face, whichever works". Free tiers as of **Oct
 
 | Layer | Choice | Notes |
 |---|---|---|
-| **Frontend** | React 19 + TypeScript (strict) + Vite | SPA plus PWA (`vite-plugin-pwa`). |
+| **Frontend** | React 19 + TypeScript (strict) + Vite | SPA plus PWA (`vite-plugin-pwa`). React and Supabase ship as separate cached chunks. |
 | UI | **shadcn/ui** + Tailwind CSS v4 + lucide icons | Shared components in `components/ui`. Severity color tokens. Dark mode. |
 | Routing | **React Router** (data mode, `createBrowserRouter`) | Dynamic segments, nested layouts per role, lazy-loaded route modules (§13). |
 | Server state | TanStack Query | Caching, retries, optimistic updates. Realtime events patch the cache. |
 | Forms | react-hook-form + zod | The shadcn `Form` pattern. |
-| API types | `openapi-typescript` + `openapi-fetch` | Types are generated from FastAPI's OpenAPI schema. No hand-copied DTOs. |
+| API types | `supabase gen types typescript` | A typed supabase-js client generated from the schema. No hand-copied DTOs. |
 | Maps | MapLibre GL (`react-map-gl`) + OpenFreeMap tiles + `h3-js` | Free vector tiles. Risk heatmap drawn as H3 hexagons. |
-| **Backend** | Python 3.12, **FastAPI**, Pydantic v2 | Async throughout. OpenAPI docs at `/docs`. |
-| Schema & migrations | **SQL migrations in `supabase/migrations`** (Supabase CLI layout) | One schema source whichever backend runtime wins decision D1. Rules that must never be skipped (ledger, roles) live in Postgres itself. |
-| Tooling | `uv`, ruff, mypy, pytest | |
+| **Backend** | Postgres functions (SQL, PL/pgSQL) + **Supabase Edge Functions** (TypeScript, Deno) | Business rules and the ledger in SQL. Edge Functions for secrets and outside APIs. |
+| Schema & migrations | **SQL migrations in `supabase/migrations`** (Supabase CLI layout) | The single schema source. Internals live in a `private` schema the API does not expose. |
+| Tooling | Supabase CLI, Deno, node:test database tests | |
 | **Database** | Supabase Postgres + PostGIS | Spatial queries: nearest station, jurisdiction, route buffers. |
-| Files | Supabase Storage (private bucket) | Browser uploads directly with short-lived signed URLs. |
-| Auth | **Supabase Auth** for people. **HMAC keys** for wearables. **WebAuthn passkeys** for step-up. | FastAPI verifies Supabase JWTs. Roles live in our own tables. |
-| Jobs & timers | Postgres-backed durable queue (for example Procrastinate, or a small `jobs` table using `FOR UPDATE SKIP LOCKED`) | No Redis needed. |
-| Realtime | FastAPI WebSockets with a topic hub | Add Postgres `LISTEN/NOTIFY` fan-out when running more than one instance. |
-| Notifications | Web Push (VAPID), email (an HTTP API such as Resend), SMS/WhatsApp (Twilio or Meta Cloud API), optional Telegram bot | Pluggable channel adapters (§8). |
+| Files | Supabase Storage (private buckets) | Storage policies let owners upload to their own folder only. |
+| Auth | **Supabase Auth** for people. **HMAC keys** for wearables. **WebAuthn passkeys** for step-up. | Roles live in our own `profiles` table and are checked by RLS. |
+| Jobs & timers | `jobs` table + **Supabase Cron** (ticks every few seconds) + `pg_net` to call Edge Functions | No separate worker process. |
+| Realtime | **Supabase Realtime** (broadcast from the database, private channels checked by RLS) | |
+| Notifications | Web Push (VAPID), email (an HTTP API such as Resend), SMS/WhatsApp (Twilio or Meta Cloud API), optional Telegram bot | Sent by the `notify` Edge Function (§8). |
 | Geo data | OpenStreetMap, Overpass API (safe points), OpenRouteService (walking routes), Nominatim (geocoding), Uber H3 (risk grid) | |
 | AI | Rules engine (always on) + Whisper speech-to-text + a triage model (Claude API or an HF ZeroGPU Space) | §9 |
-| **Hosting** | Render (API), Render Static Site or Vercel (frontend), Supabase (DB, files, auth) | §2, §15 |
-| CI/CD | GitHub Actions | Lint, type-check and tests on every PR. Auto-deploy on merge to `main`. |
+| **Hosting** | Vercel (frontend), Supabase (database, API, functions, files, auth) | §2, §15 |
+| CI/CD | GitHub Actions + Vercel Git integration | Lint, type-check and tests on every PR. Vercel deploys the frontend. |
 
 ---
 
 ## 4. Backend modules
+
+Modules are domains, not servers. Each one owns its tables, its RLS policies and its SQL functions, plus an Edge Function when it needs secrets or outside services.
 
 | Module | Responsibility | Main tables | Product IDs |
 |---|---|---|---|
@@ -115,7 +123,7 @@ The brief said "Render or Hugging Face, whichever works". Free tiers as of **Oct
 | `circle` | Trusted contacts and invitations | `trusted_contacts` | M1 |
 | `devices` | Wearable registry, HMAC auth, heartbeat, tamper, simulator | `devices`, `device_events` | M13 |
 | `sos` | Incidents, triggers, location stream, live links, resolve, cancel, duress | `incidents`, `location_pings`, `share_links` | M2, M3 |
-| `dispatch` | Choosing responders, alerts, acknowledgements, escalation ladders, SLA timers | `alerts`, `escalation_policies` | M4 |
+| `dispatch` | Choosing responders, alerts, acknowledgements, escalation ladders, SLA timers | `alerts`, `escalation_policies`, `jobs` | M4 |
 | `notify` | Channel adapters, templates, delivery receipts, push subscriptions | `notifications`, `push_subscriptions` | M4 |
 | `complaints` | Intake, confidential mode, routing, lifecycle | `complaints`, `reporter_identities` | M6 |
 | `triage` | Rules engine, AI provider adapters, severity rubric, legal tags | `triage_results`, `legal_tag_map` | M6, M7 |
@@ -130,34 +138,26 @@ The brief said "Render or Hugging Face, whichever works". Free tiers as of **Oct
 
 **Module rules**
 
-1. A module owns its tables. Other modules call its `service` functions and never touch its tables directly.
-2. Side effects (sending an alert, scheduling an escalation) go through **durable jobs**, never fire-and-forget tasks.
-3. Every meaningful state change calls `ledger.append(...)` **in the same transaction** as the change itself.
-4. Business time comes from an injectable `Clock`, so escalation and SLA logic can be tested with time travel.
+1. A module owns its tables. Other modules call its functions and never write its tables directly.
+2. Writes with rules go through **RPC functions** (`security definer`, checks inside) that write the record, the ledger entry and any job **in one transaction**. Plain reads go straight to tables, filtered by RLS.
+3. Side effects (sending an alert, scheduling an escalation) are **rows in `jobs`**, picked up by the Cron tick or an Edge Function. Never fire-and-forget from the browser.
+4. Internals (helpers, trigger functions, `ledger_append`) live in the `private` schema, which the API does not expose.
+5. Time-based functions take the current time as a parameter (default `now()`), so tests can time-travel.
 
 **Code layout**
 
 ```text
-backend/
-  app/
-    main.py              # app factory: routers, middleware, lifespan (starts the worker)
-    core/                # config, db session, auth (JWT + RBAC), errors, idempotency, clock
-    ledger/              # platform service: append, verify, anchor
-    jobs/                # durable queue, scheduler, handler registry
-    realtime/            # WebSocket hub and topics
-    modules/
-      sos/
-        router.py        # HTTP endpoints
-        schemas.py       # Pydantic request/response models
-        models.py        # SQLAlchemy tables
-        service.py       # business logic: transaction + ledger + jobs
-        jobs.py          # job handlers owned by this module
-      circle/ dispatch/ notify/ complaints/ triage/ authority/
-      vault/ custody/ geo/ journeys/ devices/ oversight/ fakecall/ identity/
-  # schema lives in supabase/migrations (SQL), shared by every runtime
-  tests/
-  pyproject.toml
-ai-service/              # optional model service (HF ZeroGPU Gradio Space)
+supabase/
+  migrations/            # SQL: tables, RLS, RPC functions, triggers (one file per change)
+  functions/             # Edge Functions (TypeScript, Deno)
+    notify/              # sends push, email, SMS for queued alerts
+    device-events/       # wearable webhook, HMAC-verified
+    triage/              # AI scoring for complaints (Phase 3)
+    _shared/             # shared helpers: Supabase client, CORS, HMAC
+  tests/                 # database tests on plain Postgres (node:test)
+  seed.sql               # demo stations
+  config.toml
+frontend/                # React PWA (§13)
 ```
 
 ---
@@ -313,7 +313,7 @@ A platform signature over each `entry_hash` (Ed25519) is planned for Phase 4, al
 
 1. **Append-only, enforced by Postgres** (`supabase/migrations/*_ledger.sql`). A `BEFORE INSERT` trigger assigns `seq`, `recorded_at` and both hashes under an advisory lock, so callers cannot choose them. Triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, even from the service role. Browsers cannot write at all: entries come from `ledger_append()`, which takes the actor from the session, called by domain functions or the backend. Corrections are new entries that reference the original (I2: "append a new corrective event").
 2. **Hash chain.** Changing any past entry breaks every later `prev_hash` link. `ledger_verify()` recomputes every hash and reports the first broken entry; a nightly job runs it.
-3. **Anchoring.** Every 10 minutes the worker computes a Merkle root over the new entries and publishes **only that root**, never personal data, to outside witnesses:
+3. **Anchoring.** Every 10 minutes a Cron job computes a Merkle root over the new entries and publishes **only that root**, never personal data, to outside witnesses:
    - **OpenTimestamps**: free, and anchors into the Bitcoin blockchain.
    - Optional for the demo: a tiny smart contract on a public EVM testnet (for example Polygon Amoy).
 4. **Replication (anti-suppression).** Evidence files and ledger heads are copied to a second, independently controlled store, standing in for the "institutional server". A daily job cross-checks hashes, and a mismatch opens an anomaly.
@@ -359,10 +359,11 @@ I3 fixes L5 at 3 min and L2 at 30 min. The other values are proposed defaults.
 
 **Mechanics**
 
-1. When an alert is created, schedule a durable job `escalation.check(subject, level)` to run at `now + timeout`.
-2. An acknowledgement marks the subject as acknowledged. The pending job then becomes a no-op when it fires.
-3. When the job fires and the subject is still unacknowledged: append an `escalated` ledger entry, notify the next level, schedule the next check.
-4. Handlers are idempotent, so running one twice is harmless. Time comes from the injectable clock.
+1. Creating an alert inserts an `escalation.check` row in `jobs` with `run_at = now() + timeout`, in the same transaction.
+2. An acknowledgement marks the subject as acknowledged. The pending job becomes a no-op when it comes due.
+3. **Supabase Cron** runs `private.escalation_tick()` every 5 seconds. It locks due jobs (`FOR UPDATE SKIP LOCKED`). For each one still unacknowledged it appends an `escalated` ledger entry, queues notifications for the next level and schedules the next check.
+4. The `notify` Edge Function, called through `pg_net`, delivers the queued notifications and writes the results back to `alerts`.
+5. The tick is idempotent and takes the current time as a parameter, so tests can time-travel.
 
 **Golden-hour metrics** per incident: time to first acknowledgement, time to dispatch, time to arrival. They are shown on the console and in weekly oversight reports.
 
@@ -372,16 +373,16 @@ I3 fixes L5 at 3 min and L2 at 30 min. The other values are proposed defaults.
 
 **Realtime**
 
-- WebSocket endpoint: `/ws?ticket=…`. Browsers cannot set auth headers on WebSockets, so the client first fetches a 60-second ticket from `POST /api/v1/realtime/ticket`.
-- Topics: `incident:{id}`, `journey:{id}`, `org:{id}:live`, `org:{id}:queue`, `user:{id}`.
-- Location goes up over **REST** (`POST /incidents/{id}/locations`, batched), so it still works when the socket drops. The server fans it out over WebSockets.
+- **Supabase Realtime** over WebSockets, using private channels: `incident:{id}`, `journey:{id}`, `org:{id}:live`, `org:{id}:queue`, `user:{id}`. RLS policies on `realtime.messages` decide who may join each channel.
+- Database triggers broadcast changes (incident status, acknowledgements, new queue items) to the right channel, so every write path produces the same live updates.
+- Location goes up through an RPC (`record_location`, batched), so it still works when the socket drops. A trigger broadcasts it to the incident's channel.
 - Trusted-contact live link `/t/:token`: 128-bit random token, stored hashed, read-only plus "I'm responding", expires 24 h after the incident closes.
 
 **Notification channels** share one adapter interface, `send(recipient, message) → receipt`.
 
 | Order | Channel | Cost | Notes |
 |---|---|---|---|
-| 1 | In-app (WebSocket) | Free | Instant while the app is open |
+| 1 | In-app (Realtime) | Free | Instant while the app is open |
 | 2 | Web Push (VAPID) | Free | iOS requires the PWA to be installed |
 | 3 | Email (Resend or Brevo API) | Free tier | Carries the live link |
 | 4 | Telegram bot | Free | Good fallback for demos |
@@ -408,7 +409,7 @@ flowchart LR
   CB --> UP["Update severity<br/>SLA tightens if higher"]
 ```
 
-- **Rules engine** (always on, inside the API): an English, Hindi and Hinglish phrase lexicon plus patterns such as a weapon mentioned, an ongoing situation ("following me right now"), injury words or night time. It produces a **severity floor** and a category hint in under 50 ms. It is deterministic, explainable and works when the AI is down.
+- **Rules engine** (always on, in SQL or the `triage` Edge Function): an English, Hindi and Hinglish phrase lexicon plus patterns such as a weapon mentioned, an ongoing situation ("following me right now"), injury words or night time. It produces a **severity floor** and a category hint in under 50 ms. It is deterministic, explainable and works when the AI is down.
 - **AI model** (pluggable and asynchronous; it never blocks the citizen). Two adapters:
 
   | Adapter | What | Cost | Trade-off |
@@ -449,7 +450,7 @@ flowchart LR
 ### 9.2 Speech-to-text
 
 - **In the browser:** live dictation through the Web Speech API (Chrome/Android, `en-IN` / `hi-IN`). Text appears instantly at no cost.
-- **On the server:** Whisper (adapter B, or another STT provider) produces the authoritative transcript of the stored voice note.
+- **On the server:** Whisper produces the authoritative transcript of the stored voice note, through Cloudflare Workers AI (free daily allowance) or the HF Space, called from an Edge Function.
 - The **original audio is always kept as sealed evidence**, so the citizen's exact words are preserved (I3-A§4).
 
 ### 9.3 Anomaly detection (M14)
@@ -487,9 +488,9 @@ flowchart LR
 **Upload path**
 
 1. The browser computes SHA-256: Web Crypto for small files, the streaming `hash-wasm` library for large videos.
-2. `POST /vault/items` sends the hash, size, type, capture time and GPS. The API answers with a signed upload URL.
-3. The browser uploads directly to the private bucket, so large files never pass through the small API instance.
-4. `POST /vault/items/{id}/complete`. The worker re-hashes the stored file. A match marks the item **Sealed** and adds a ledger entry. A mismatch rejects it and opens an anomaly.
+2. `rpc('register_evidence')` records the hash, size, type, capture time and GPS, and returns the storage path.
+3. The browser uploads straight to the private bucket. Storage policies allow writes only to the owner's own folder.
+4. The `verify-evidence` Edge Function re-hashes the stored file. A match marks the item **Sealed** and adds a ledger entry. A mismatch rejects it and opens an anomaly.
 
 **Protection**
 
@@ -512,11 +513,11 @@ flowchart LR
 ## 12. Security & privacy
 
 - **Roles:** citizen, contact (link scope), officer, supervisor, oversight, admin, device.
-- **Row-level rules:** officers see only items routed to their organization; supervisors see their organization and its children; citizens see only their own data. Enforced in the service layer and covered by tests.
+- **Row-level rules:** officers see only items routed to their organization; supervisors see their organization and its children; citizens see only their own data. Enforced by Postgres row-level security and checks inside RPC functions, and covered by database tests.
 - **Confidential mode:** identity is stored separately and encrypted. Officers see a pseudonym ("Citizen #A7F3"). Contact happens through in-app channels, so no phone number is exposed. Revealing the identity needs the citizen's consent, and every reveal is ledgered.
 - **Data minimization:** location is collected only during an SOS or journey. Raw pings are deleted after 30 days unless attached to a case. Emergency audio follows retention limits.
 - **Every evidence view or download is a ledger entry.** These entries feed anomaly detection.
-- **Secrets** live in the Render and Supabase dashboards, never in git, with separate keys per environment.
+- **Secrets** (provider API keys, VAPID keys) live in Supabase Edge Function secrets, never in git. The browser only ever holds the publishable key.
 - **Abuse controls:** rate limits everywhere except the owner's own SOS creation (which is idempotent instead), false-alarm codes, verified sign-up.
 - **Compliance considerations (India):** the Digital Personal Data Protection Act, 2023 (consent, purpose limitation, erasure requests against legal hold) and electronic-evidence certificate requirements under the Bharatiya Sakshya Adhiniyam, 2023. Both need to be validated with legal advisors before any pilot.
 
@@ -591,24 +592,27 @@ frontend/src/
 
 ## 14. API conventions
 
-- REST under `/api/v1`, JSON bodies, OpenAPI docs at `/docs`.
-- **Auth:** `Authorization: Bearer <Supabase JWT>`.
-  **Devices:** `X-Device-Id` + `X-Timestamp` + `X-Nonce` + `X-Signature` (HMAC-SHA256 over timestamp, nonce and body). Requests outside a 60 s window or with a reused nonce are rejected.
-- **`Idempotency-Key`** header on SOS creation, complaint creation and evidence upload, so retries on flaky networks never create duplicates.
-- **Errors:** RFC 9457 `application/problem+json`. Example: a skipped workflow state returns `409` with the missing requirements listed.
-- **Pagination:** cursor-based. **Times:** ISO-8601 in UTC; the UI shows local time.
+- **Reads** go straight to tables through Supabase's Data API, filtered by RLS.
+- **Writes with rules** are RPC functions: `supabase.rpc('create_sos', {...})`. Each one checks permissions, writes the record, the ledger entry and any job in one transaction.
+- **Edge Functions** (`/functions/v1/<name>`) handle anything that needs secrets or outside services.
+- **Types:** `supabase gen types typescript` generates the client types from the schema.
+- **Auth:** supabase-js sends the user's JWT automatically.
+  **Devices:** `X-Device-Id` + `X-Timestamp` + `X-Nonce` + `X-Signature` (HMAC-SHA256 over timestamp, nonce and body) to `/functions/v1/device-events`. Requests outside a 60 s window or with a reused nonce are rejected.
+- **Idempotency:** RPCs that create records take a client-generated id (`p_client_id`, unique). A retry on a flaky network returns the existing record instead of a duplicate.
+- **Errors:** SQL functions raise errors with stable codes and plain messages. For example, a skipped workflow state lists the missing requirements.
+- **Times:** ISO-8601 in UTC; the UI shows local time.
 
-Key endpoints by phase:
+Key calls by phase:
 
-| Phase | Endpoints |
+| Phase | Calls |
 |---|---|
-| P0 | `GET /me`, `POST /realtime/ticket`, `GET /ledger/subjects/{type}/{id}` |
-| P1 | `GET/POST /circle/contacts`, `POST /sos`, `POST /incidents/{id}/locations`, `POST /incidents/{id}/resolve`, `GET /share/{token}`, `POST /share/{token}/ack`, `POST /device-api/v1/events` |
-| P2 | `GET /console/live`, `POST /incidents/{id}/ack`, `POST /incidents/{id}/dispatch`, `GET/PUT /admin/escalation-policies` |
-| P3 | `POST /complaints`, `GET /console/queue`, `POST /complaints/{id}/ack`, `POST /complaints/{id}/severity`, `GET /reviews/overrides` |
-| P4 | `POST /vault/items`, `POST /vault/items/{id}/complete`, `POST /vault/items/{id}/share`, `POST /cases/{id}/transitions`, `POST /evidence/{id}/signatures`, `POST /evidence/{id}/custody-transfers`, `GET /verify/{sha256}` |
-| P5 | `GET /geo/risk-cells`, `GET /geo/safe-points`, `POST /geo/zone-reports`, `POST /geo/routes/safe`, `POST /journeys`, `POST /journeys/{id}/pings` |
-| P6 | `POST /complaints/{id}/contact-attempts`, `POST /complaints/{id}/dispatch-decision`, `POST /complaints/{id}/fir-drafts` |
+| P0 | `profiles` (own row), `organizations`, `rpc admin_set_role`, `rpc ledger_verify` |
+| P1 | `trusted_contacts`, `rpc create_sos`, `rpc record_location`, `rpc resolve_incident`, `rpc view_share_link`, `rpc ack_share_link`, `functions/v1/device-events`, `functions/v1/notify` |
+| P2 | `rpc acknowledge_incident`, `rpc dispatch_unit`, `escalation_policies` (admin) |
+| P3 | `rpc submit_complaint`, `rpc acknowledge_complaint`, `rpc set_complaint_severity`, `functions/v1/triage` |
+| P4 | `rpc register_evidence`, Storage upload, `functions/v1/verify-evidence`, `rpc transition_case`, `rpc sign_evidence`, `rpc start_custody_transfer`, `rpc accept_custody_transfer`, `rpc lookup_hash` |
+| P5 | `risk_cells`, `safe_points`, `rpc report_zone`, `functions/v1/safe-route`, `rpc start_journey`, `rpc journey_ping` |
+| P6 | `rpc log_contact_attempt`, `rpc decide_dispatch`, `functions/v1/fir-draft` |
 
 ---
 
@@ -617,23 +621,21 @@ Key endpoints by phase:
 ```mermaid
 flowchart LR
   DEV["Developer"] -->|PR| GH["GitHub"]
-  GH -->|"Actions: lint, type-check, tests"| CI["CI"]
-  GH -->|merge to main| RS["Render Static Site<br/>frontend"]
-  GH -->|merge to main| RW["Render Web Service<br/>FastAPI + worker"]
-  RW --> SB[("Supabase<br/>Postgres, Storage, Auth")]
-  RW --> AIP["AI provider<br/>Claude API or HF Space"]
-  UP["Uptime pinger"] -->|"/healthz every 5 min"| RW
+  GH -->|"Actions: lint, types, tests, DB tests"| CI["CI"]
+  GH -->|push| VC["Vercel<br/>builds and serves the frontend"]
+  DEV -->|"migrations + Edge Functions<br/>(Supabase CLI or connector)"| SB["Supabase project"]
+  VC -.->|browser calls| SB
 ```
 
-- **Environments:** local (Docker Compose with Postgres + PostGIS, or the Supabase CLI) and production/demo. Add staging when a pilot starts.
-- **Infrastructure as code:** `render.yaml` blueprint for the API and the static site. SQL migrations in `supabase/migrations`, applied with `supabase db push`.
-- **Observability:** structured JSON logs with request IDs, Sentry free tier for frontend and backend errors, `/healthz`, and job-queue lag.
+- **Environments:** local (`supabase start` with the Supabase CLI, `npm run dev`) and the hosted project. Add a staging project when a pilot starts.
+- **Infrastructure as code:** SQL migrations and Edge Functions in `supabase/`. Frontend hosting settings in `frontend/vercel.json` (SPA routing, cache headers).
+- **Observability:** Supabase logs (API, Postgres, Auth, Edge Functions) and advisors, Vercel deployment logs, optional Sentry free tier for frontend errors.
 - **Key metrics:** time from SOS trigger to first alert sent, time to acknowledgement, SLA breaches, failed deliveries.
 - **Testing:**
-  - unit tests (rules engine, state machines, ledger hashing);
-  - integration tests (API + real Postgres/PostGIS);
+  - database tests on plain Postgres (RLS, role escalation, ledger, escalation tick with time travel);
+  - frontend unit and routing tests;
   - Playwright end-to-end tests (SOS, complaint, evidence);
-  - time-travel tests for escalation using the fake clock.
+  - after each migration, the Supabase security and performance advisors.
 
 ---
 

@@ -63,27 +63,22 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** a deployed skeleton that every feature builds on.
 
-**Status (October 2026):** the parts that are the same whichever backend runtime wins D1 are built. The rest waits on D1 and on a Supabase project.
+**Status (October 2026):** built and live on the Supabase project, except the hosted sign-in check, which needs one Auth setting (below).
 
 **Built**
 
-- **Frontend shell** (`frontend/`): Vite + React 19 + TypeScript, Tailwind v4, shadcn/ui components, React Router 8 route trees for Public, Citizen (`/app`), Console (`/console`) and Contact (`/t/:token`) with lazy-loaded screens, role guards, dynamic segments and a 404 page. Supabase Auth sign-in and sign-up, redirect by role, light and dark themes with severity tokens. Later screens are placeholders that already receive their route params. SOS controls are visibly disabled and point to 112 until Phase 1.
-- **Database foundation** (`supabase/`): SQL migrations for `profiles`, `organizations` and `memberships`, a sign-up trigger that creates citizen profiles, `admin_set_role()` (the only way to grant staff roles, ledgered), row-level security, and the hash-chained ledger enforced by Postgres triggers with `ledger_verify()`. Seed data: a district control room, 3 police stations and a college security desk.
-- **Tests and CI:** 16 frontend tests (guards, dynamic routes, sign-in) and 14 database tests (RLS, role escalation, chain validity, tamper detection, append-only, concurrent writers). GitHub Actions runs lint, formatting, type-check, tests and build on every PR.
+- **Frontend shell** (`frontend/`): Vite + React 19 + TypeScript, Tailwind v4, shadcn/ui components, React Router 8 route trees for Public, Citizen (`/app`), Console (`/console`) and Contact (`/t/:token`) with lazy-loaded screens, role guards, dynamic segments and a 404 page. Supabase Auth sign-in and sign-up, redirect by role, light and dark themes with severity tokens. Later screens are placeholders that already receive their route params. SOS controls are visibly disabled and point to 112 until Phase 1. React and Supabase ship as separately cached chunks; app code is about 27 KB gzipped.
+- **Database** (`supabase/`, applied to the hosted project): `profiles`, `organizations` and `memberships` with RLS, a sign-up trigger that creates citizen profiles, `admin_set_role()` (the only way to grant staff roles, ledgered), and the hash-chained ledger enforced by Postgres triggers with `ledger_verify()`. Internals live in a `private` schema the API does not expose. Demo stations seeded. Supabase security and performance advisors are clean apart from the two deliberate admin RPCs.
+- **Tests and CI:** 16 frontend tests and 15 database tests, plus a live smoke test on the hosted project inside a rolled-back transaction. GitHub Actions runs lint, formatting, type-check, tests and build on every PR.
 
-**Waiting on D1 (backend runtime)**
+**Needs a dashboard setting (Supabase → Authentication)**
 
-- Backend service skeleton: FastAPI on Render, or Supabase Edge Functions.
-- Durable job worker and realtime channel (our own, or Supabase Cron + Realtime).
-- Notification adapter skeleton, idempotency, problem+json errors.
-
-**Waiting on a Supabase project**
-
-- Apply migrations, create demo staff accounts, deploy the frontend, add an uptime check.
+- Built-in email only reaches the project's team members. For the demo, turn off **Confirm email**, or add custom SMTP (for example Resend).
+- Set **Site URL** to the deployed frontend URL and add it to **Redirect URLs**.
 
 **Done when**
 
-- [ ] A citizen and an officer can sign in on the deployed URLs and land on their own home screens. A citizen opening `/console` is blocked. *(Works locally in tests; needs the hosted project.)*
+- [ ] A citizen and an officer can sign in on the deployed URLs and land on their own home screens. A citizen opening `/console` is blocked. *(Covered by tests; the hosted check waits on the Auth settings above.)*
 - [x] Tests prove the ledger works: changing any stored entry makes `ledger_verify()` fail.
 - [x] CI runs lint, type-check and tests on every PR.
 
@@ -280,14 +275,14 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 ## 4. Decisions
 
-Recommended defaults are listed first. **Please confirm or change these before P0 starts.**
+D1 to D4 are decided. The rest have recommended defaults; confirm or change them when the phase that needs them starts.
 
 | # | Decision | Recommended default | Alternative |
 |---|---|---|---|
-| D1 | Backend runtime | **Open.** Render free web service (Python FastAPI, about 1 min cold start after 15 min idle) | Supabase Edge Functions (TypeScript, no long cold start, built-in realtime and cron). Hugging Face Docker Spaces need PRO ($9/month). |
-| D2 | Database & files | **Supabase** Postgres + PostGIS + Storage | Neon + Cloudflare R2 |
-| D3 | Auth | **Supabase Auth**, with JWTs verified in FastAPI | Auth built into FastAPI |
-| D4 | Frontend hosting | **Render Static Site** (one platform) | Vercel (preview URL per PR) |
+| D1 | Backend runtime | **Decided: Supabase-native.** Rules and ledger in Postgres (RPC functions + RLS), Edge Functions (TypeScript) for secrets and outside APIs, Realtime, Cron. | Cloudflare Workers + Durable Objects (kept in reserve), Python FastAPI on Render (about 1 min wake-up on free tier) |
+| D2 | Database & files | **Decided: Supabase** Postgres + PostGIS + Storage (project `women's safety`) | Cloudflare R2 for evidence if storage outgrows 1 GB |
+| D3 | Auth | **Decided: Supabase Auth**, roles in `profiles`, checked by RLS | n/a |
+| D4 | Frontend hosting | **Decided: Vercel** (global CDN, preview URL per PR) | Cloudflare Pages, Render Static Site |
 | D5 | Triage AI | **Rules engine first.** Then the Claude API (`claude-opus-5-5`, low effort, structured output) if there is an API budget, otherwise an HF ZeroGPU Space (free, quota-limited). | |
 | D6 | "Blockchain" | **Hash-chained ledger + OpenTimestamps**, with an optional testnet contract for the demo | Running a blockchain node (not recommended) |
 | D7 | Demo notification channels | **Web Push + email + Telegram**, then Twilio SMS/WhatsApp sandbox | MSG91 (needs DLT), Meta WhatsApp Cloud API |

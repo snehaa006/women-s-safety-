@@ -28,14 +28,14 @@ sequenceDiagram
   autonumber
   actor U as Citizen
   participant App as Citizen app
-  participant API as API
+  participant API as Supabase API
   participant DB as Postgres
-  participant W as Worker
+  participant W as Cron + notify function
   actor C as Trusted contacts
   actor O as Duty officer
 
   U->>App: Press and hold SOS, or wearable long press
-  App->>API: POST /sos with location and Idempotency-Key
+  App->>API: rpc create_sos with location and client id
   API->>DB: One transaction: incident + first location + ledger entry + dispatch job
   API-->>App: 201 incidentId and live link
   W->>DB: Pick up dispatch job
@@ -43,7 +43,7 @@ sequenceDiagram
   W->>O: Console alert and push for the responsible station
   W->>DB: Schedule escalation check in 2 min
   loop Every 5 s while active
-    App->>API: POST /incidents/id/locations
+    App->>API: rpc record_location
     API-->>C: Live location over WebSocket
     API-->>O: Live location over WebSocket
   end
@@ -53,14 +53,14 @@ sequenceDiagram
   O->>API: Dispatch patrol unit with ETA
   API-->>App: Unit on the way, ETA shown
   U->>App: I'm safe + PIN
-  App->>API: POST /incidents/id/resolve
+  App->>API: rpc resolve_incident
   API->>DB: Resolve + ledger entry, live link closes
 ```
 
 **Rules**
 
-- `POST /sos` must answer in under 500 ms. Everything slow (notifications) happens in jobs.
-- The same `Idempotency-Key` never creates a second incident.
+- `rpc create_sos` must answer in under 500 ms. Everything slow (notifications) happens in jobs.
+- The same client id never creates a second incident.
 - The responsible station is the one whose jurisdiction polygon contains the location. If there is none, the nearest station.
 - "I'm safe" requires the SOS PIN. The **duress PIN** shows the same "cancelled" screen, but the incident stays active and escalates silently.
 - The live link shows only this incident and expires 24 h after resolution.
@@ -153,15 +153,15 @@ sequenceDiagram
   autonumber
   actor U as Citizen
   participant App as Citizen app
-  participant API as API
+  participant API as Supabase API
   participant R as Rules engine
-  participant W as Worker
+  participant W as Triage function
   participant AI as AI provider
   actor O as Station officer
 
   U->>App: Speak or type what happened, GPS auto-filled
   U->>App: Optional: switch on Confidential mode
-  App->>API: POST /complaints with text, audio and location
+  App->>API: rpc submit_complaint with text, audio and location
   API->>R: Score the text
   R-->>API: Severity floor + category hint
   API->>API: Route to station by location, start SLA timer, ledger entry with content hash
@@ -248,17 +248,17 @@ sequenceDiagram
   autonumber
   actor U as Citizen
   participant App as Citizen app
-  participant API as API
+  participant API as Supabase API
   participant S as Storage
-  participant W as Worker
+  participant W as Verify function
   participant L as Ledger
 
   U->>App: Record or pick a file
   App->>App: SHA-256 in the browser, read GPS and time
-  App->>API: POST /vault/items with hash, size, type, capturedAt, location
-  API-->>App: itemId + signed upload URL
-  App->>S: Upload file directly
-  App->>API: POST /vault/items/id/complete
+  App->>API: rpc register_evidence with hash, size, type, capturedAt, location
+  API-->>App: itemId + storage path
+  App->>S: Upload file to own folder
+  App->>W: Verify upload
   W->>S: Read the stored file
   W->>W: Re-compute SHA-256
   alt Hash matches
@@ -269,7 +269,7 @@ sequenceDiagram
     W-->>App: Upload failed, retry
   end
   U->>App: Attach to a report or share with the station
-  App->>API: POST /vault/items/id/share
+  App->>API: rpc share_evidence
   API->>L: Append evidence.shared to the organization
 ```
 
@@ -448,12 +448,12 @@ From I3-C§3 and I2§1.
 sequenceDiagram
   autonumber
   participant D as Wearable
-  participant API as API
-  participant W as Worker
+  participant API as Device function
+  participant W as Cron + notify function
   actor C as Contacts and station
   D->>D: Long press 3 s, haptic buzz
   D->>D: Get GNSS fix, or last known position
-  D->>API: POST /device-api/v1/events type sos with lat, lng, battery + HMAC
+  D->>API: POST /functions/v1/device-events type sos with lat, lng, battery + HMAC
   API->>API: Verify signature, timestamp window, nonce
   API-->>D: 202 Accepted, device buzzes twice
   API->>W: Same dispatch flow as an app SOS

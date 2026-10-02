@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens (shadcn/ui variable names plus our own).
+ * primary = dispatch blue (system, links, focus). sos = signal red, reserved for SOS and critical.
+ * sev-1..sev-5 = complaint severity scale L1 (low) to L5 (critical).
+ */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.975 0.004 255);
+  --foreground: oklch(0.22 0.03 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.03 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.03 265);
+  --primary: oklch(0.46 0.19 265);
+  --primary-foreground: oklch(0.985 0.005 255);
+  --secondary: oklch(0.94 0.012 260);
+  --secondary-foreground: oklch(0.26 0.03 265);
+  --muted: oklch(0.95 0.008 260);
+  --muted-foreground: oklch(0.5 0.03 265);
+  --accent: oklch(0.94 0.03 265);
+  --accent-foreground: oklch(0.3 0.08 265);
+  --destructive: oklch(0.53 0.21 20);
+  --border: oklch(0.91 0.01 260);
+  --input: oklch(0.88 0.012 260);
+  --ring: oklch(0.46 0.19 265);
+  --sos: oklch(0.53 0.21 20);
+  --sos-foreground: oklch(0.985 0.005 20);
+  --sev-1: oklch(0.52 0.03 265);
+  --sev-2: oklch(0.52 0.17 258);
+  --sev-3: oklch(0.53 0.11 80);
+  --sev-4: oklch(0.55 0.17 40);
+  --sev-5: oklch(0.53 0.21 20);
+}
+
+.dark {
+  --background: oklch(0.17 0.02 265);
+  --foreground: oklch(0.93 0.01 260);
+  --card: oklch(0.22 0.025 265);
+  --card-foreground: oklch(0.93 0.01 260);
+  --popover: oklch(0.22 0.025 265);
+  --popover-foreground: oklch(0.93 0.01 260);
+  --primary: oklch(0.74 0.13 268);
+  --primary-foreground: oklch(0.18 0.03 265);
+  --secondary: oklch(0.27 0.03 265);
+  --secondary-foreground: oklch(0.93 0.01 260);
+  --muted: oklch(0.25 0.025 265);
+  --muted-foreground: oklch(0.72 0.03 262);
+  --accent: oklch(0.29 0.05 265);
+  --accent-foreground: oklch(0.93 0.01 260);
+  --destructive: oklch(0.71 0.18 15);
+  --border: oklch(0.31 0.03 265);
+  --input: oklch(0.34 0.03 265);
+  --ring: oklch(0.74 0.13 268);
+  --sos: oklch(0.62 0.21 18);
+  --sos-foreground: oklch(0.99 0.005 20);
+  --sev-1: oklch(0.75 0.03 265);
+  --sev-2: oklch(0.73 0.13 262);
+  --sev-3: oklch(0.85 0.14 90);
+  --sev-4: oklch(0.77 0.14 50);
+  --sev-5: oklch(0.71 0.18 15);
+}
+
+@theme inline {
+  --font-sans:
+    'Atkinson Hyperlegible', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display:
+    'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sos: var(--sos);
+  --color-sos-foreground: var(--sos-foreground);
+  --color-sev-1: var(--sev-1);
+  --color-sev-2: var(--sev-2);
+  --color-sev-3: var(--sev-3);
+  --color-sev-4: var(--sev-4);
+  --color-sev-5: var(--sev-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    text-wrap: balance;
+  }
+}

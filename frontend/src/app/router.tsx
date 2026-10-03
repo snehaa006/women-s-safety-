@@ -1,6 +1,5 @@
 import { Outlet, type RouteObject } from 'react-router'
 
-import { PlaceholderPage } from '@/components/placeholder-page'
 import { STAFF_ROLES } from '@/lib/roles'
 
 import { RequireRole } from './guards'
@@ -12,8 +11,7 @@ import { RouteError } from './route-error'
 
 /*
  * One route tree per audience. Each area has its own layout and role guard, and its screens are
- * lazy-loaded, so citizens never download console code. Screens a later phase builds use
- * PlaceholderPage, which already receives the dynamic params (:incidentId, :caseId, ...).
+ * lazy-loaded, so citizens never download console code.
  */
 export const routes: RouteObject[] = [
   {
@@ -44,17 +42,8 @@ export const routes: RouteObject[] = [
           { index: true, lazy: () => import('@/routes/citizen/home') },
           { path: 'sos/:incidentId', lazy: () => import('@/routes/citizen/sos') },
           { path: 'incidents/:incidentId', lazy: () => import('@/routes/citizen/incident') },
-          {
-            path: 'map',
-            element: (
-              <PlaceholderPage
-                title="Safety map"
-                phase="P5"
-                module="M11"
-                description="Risk heatmap, safe points and the safest route."
-              />
-            ),
-          },
+          { path: 'map', lazy: () => import('@/routes/citizen/map') },
+          { path: 'journeys/:journeyId', lazy: () => import('@/routes/citizen/journey') },
           { path: 'report', lazy: () => import('@/routes/citizen/report') },
           { path: 'reports/:complaintId?', lazy: () => import('@/routes/citizen/reports') },
           { path: 'vault/:itemId?', lazy: () => import('@/routes/citizen/vault') },

@@ -47,10 +47,14 @@ describe('route guards', () => {
 
 describe('dynamic routes', () => {
   it('passes route params to the screen', async () => {
+    // Without Supabase keys the screen shows its error state, linking back to the case it read
+    // from the URL.
     renderRoute('/console/cases/CASE-2026-001/evidence/EV-17', createFakeAuthClient(officer))
-    expect(await screen.findByRole('heading', { name: 'Evidence item' })).toBeInTheDocument()
-    expect(screen.getByText('CASE-2026-001')).toBeInTheDocument()
-    expect(screen.getByText('EV-17')).toBeInTheDocument()
+    expect(await screen.findByText("We couldn't open this item")).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to the case' })).toHaveAttribute(
+      'href',
+      '/console/cases/CASE-2026-001',
+    )
   })
 
   it('serves the trusted-contact live link without signing in', async () => {

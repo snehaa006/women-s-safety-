@@ -12,7 +12,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 
 import { PageHeader } from '@/components/page-header'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -51,6 +51,7 @@ import {
 import { SeverityBadge } from '@/features/complaints/severity-badge'
 import { useListenOrg, useOrgChannel, useStaff } from '@/features/console/use-console'
 import { mapsLink } from '@/features/map/links'
+import { openCase } from '@/features/evidence/api'
 import { paths } from '@/lib/paths'
 import { fallbackInterval } from '@/lib/realtime'
 import { formatDateTime, formatTime } from '@/lib/time'
@@ -438,6 +439,7 @@ function Actions({ complaint }: { complaint: ConsoleComplaint }) {
         ) : null}
         <SeverityDialog complaint={complaint} />
         <ResolveDialog complaintId={complaint.id} />
+        <OpenCase complaint={complaint} />
       </div>
       {complaint.acknowledged_by ? (
         <p className="text-muted-foreground text-sm">
@@ -447,6 +449,24 @@ function Actions({ complaint }: { complaint: ConsoleComplaint }) {
       ) : null}
       {ack.isError ? <p className="text-destructive text-sm">{ack.error.message}</p> : null}
     </section>
+  )
+}
+
+/** Opens (or goes to) the case for this complaint, with its shared evidence on it. */
+function OpenCase({ complaint }: { complaint: ConsoleComplaint }) {
+  const navigate = useNavigate()
+  const open = useMutation({
+    mutationFn: () =>
+      openCase(`${complaint.category_label} · ${complaint.reference}`, complaint.id),
+    onSuccess: (result) => navigate(paths.console.case(result.case_id)),
+  })
+  return (
+    <>
+      <Button variant="outline" onClick={() => open.mutate()} disabled={open.isPending}>
+        Case and evidence
+      </Button>
+      {open.isError ? <p className="text-destructive text-sm">{open.error.message}</p> : null}
+    </>
   )
 }
 

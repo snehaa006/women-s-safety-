@@ -25,17 +25,7 @@ export const routes: RouteObject[] = [
           { index: true, lazy: () => import('@/routes/public/landing') },
           { path: 'login', lazy: () => import('@/routes/public/login') },
           { path: 'signup', lazy: () => import('@/routes/public/signup') },
-          {
-            path: 'verify/:sha256?',
-            element: (
-              <PlaceholderPage
-                title="Verify evidence"
-                phase="P4"
-                module="M10"
-                description="Drop a file to check it against the ledger. It is hashed on your device and never uploaded."
-              />
-            ),
-          },
+          { path: 'verify/:sha256?', lazy: () => import('@/routes/public/verify') },
         ],
       },
       {
@@ -67,17 +57,7 @@ export const routes: RouteObject[] = [
           },
           { path: 'report', lazy: () => import('@/routes/citizen/report') },
           { path: 'reports/:complaintId?', lazy: () => import('@/routes/citizen/reports') },
-          {
-            path: 'vault/:itemId?',
-            element: (
-              <PlaceholderPage
-                title="Evidence vault"
-                phase="P4"
-                module="M9"
-                description="Recordings and files, sealed with a fingerprint and shared only when you choose."
-              />
-            ),
-          },
+          { path: 'vault/:itemId?', lazy: () => import('@/routes/citizen/vault') },
           { path: 'circle/:contactId?', lazy: () => import('@/routes/citizen/circle') },
           { path: 'settings', lazy: () => import('@/routes/citizen/settings') },
           { path: 'devices', lazy: () => import('@/routes/citizen/devices') },
@@ -95,27 +75,10 @@ export const routes: RouteObject[] = [
           { index: true, lazy: () => import('@/routes/console/live') },
           { path: 'incidents/:incidentId', lazy: () => import('@/routes/console/incident') },
           { path: 'complaints/:complaintId?', lazy: () => import('@/routes/console/complaints') },
-          {
-            path: 'cases/:caseId?',
-            element: (
-              <PlaceholderPage
-                title="Cases"
-                phase="P4"
-                module="M10"
-                description="Procedural workflow and evidence checklist for each case."
-              />
-            ),
-          },
+          { path: 'cases/:caseId?', lazy: () => import('@/routes/console/cases') },
           {
             path: 'cases/:caseId/evidence/:evidenceId',
-            element: (
-              <PlaceholderPage
-                title="Evidence item"
-                phase="P4"
-                module="M10"
-                description="Hash, signatures and the full chain of custody."
-              />
-            ),
+            lazy: () => import('@/routes/console/evidence'),
           },
           { path: 'map', lazy: () => import('@/routes/console/map') },
           { path: 'reviews', lazy: () => import('@/routes/console/reviews') },

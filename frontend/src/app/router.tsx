@@ -1,4 +1,4 @@
-import type { RouteObject } from 'react-router'
+import { Outlet, type RouteObject } from 'react-router'
 
 import { PlaceholderPage } from '@/components/placeholder-page'
 import { STAFF_ROLES } from '@/lib/roles'
@@ -113,17 +113,7 @@ export const routes: RouteObject[] = [
         ),
         children: [
           { index: true, lazy: () => import('@/routes/console/live') },
-          {
-            path: 'incidents/:incidentId',
-            element: (
-              <PlaceholderPage
-                title="Incident"
-                phase="P2"
-                module="M5"
-                description="Live map, timeline, acknowledge, dispatch and resolve."
-              />
-            ),
-          },
+          { path: 'incidents/:incidentId', lazy: () => import('@/routes/console/incident') },
           {
             path: 'complaints/:complaintId?',
             element: (
@@ -157,17 +147,7 @@ export const routes: RouteObject[] = [
               />
             ),
           },
-          {
-            path: 'map',
-            element: (
-              <PlaceholderPage
-                title="Map"
-                phase="P2"
-                module="M5"
-                description="Incidents, patrol units and the risk layer."
-              />
-            ),
-          },
+          { path: 'map', lazy: () => import('@/routes/console/map') },
           {
             path: 'reviews',
             element: (
@@ -183,13 +163,10 @@ export const routes: RouteObject[] = [
             path: 'admin/:section',
             element: (
               <RequireRole roles={['admin']}>
-                <PlaceholderPage
-                  title="Administration"
-                  phase="P2"
-                  description="Stations, members, escalation policies, workflows and legal tags."
-                />
+                <Outlet />
               </RequireRole>
             ),
+            children: [{ index: true, lazy: () => import('@/routes/console/admin') }],
           },
         ],
       },

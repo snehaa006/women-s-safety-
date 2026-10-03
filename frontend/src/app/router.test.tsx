@@ -41,7 +41,7 @@ describe('route guards', () => {
   it('lets an admin open admin screens', async () => {
     renderRoute('/console/admin/stations', createFakeAuthClient(admin))
     expect(await screen.findByRole('heading', { name: 'Administration' })).toBeInTheDocument()
-    expect(screen.getByText('stations')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Escalation' })).toBeInTheDocument()
   })
 })
 

@@ -147,7 +147,7 @@ describe('alerts to the circle', () => {
 
     const job = await db.query(
       `select kind, run_at - now() > interval '110 seconds' as later from private.jobs
-       where payload ->> 'incident_id' = $1`,
+       where payload ->> 'incident_id' = $1 and kind = 'sos.reminder'`,
       [incident_id],
     )
     assert.deepEqual(job.rows, [{ kind: 'sos.reminder', later: true }])

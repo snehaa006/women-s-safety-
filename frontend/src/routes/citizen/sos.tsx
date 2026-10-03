@@ -26,12 +26,14 @@ import {
   fetchAlerts,
   fetchIncident,
   fetchPath,
+  fetchPoliceResponse,
   fetchResponders,
   sosKeys,
   type Incident,
   type ResolveResult,
 } from '@/features/sos/api'
 import { summarizeCircle, type ContactState } from '@/features/sos/circle-status'
+import { PoliceCard } from '@/features/sos/police-card'
 import { ResolveDialog } from '@/features/sos/resolve-dialog'
 import { SafePointsCard } from '@/features/sos/safe-points'
 import { useSafePoints } from '@/features/sos/use-safe-points'
@@ -166,6 +168,8 @@ function ActiveSos({
         </a>
       </Button>
 
+      <PoliceStatus incidentId={incident.id} live={live} />
+
       <CircleCard incidentId={incident.id} live={live} />
 
       <ShareCard shareToken={shareToken} />
@@ -251,6 +255,16 @@ const STATE_STYLE: Record<ContactState, string> = {
   sent: 'bg-primary/60',
   sending: 'bg-muted-foreground animate-pulse',
   problem: 'bg-destructive',
+}
+
+/** Which station has the SOS, and the unit on the way. Updates live. */
+function PoliceStatus({ incidentId, live }: { incidentId: string; live: boolean }) {
+  const police = useQuery({
+    queryKey: sosKeys.police(incidentId),
+    queryFn: () => fetchPoliceResponse(incidentId),
+    refetchInterval: fallbackInterval(live),
+  })
+  return police.data ? <PoliceCard response={police.data} /> : null
 }
 
 /** Who was alerted, who opened the link, who is on the way. Updates live. */

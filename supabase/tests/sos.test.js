@@ -163,7 +163,7 @@ describe('SOS', () => {
     assert.equal(again.created, false)
     assert.deepEqual(
       (await ledgerFor(first.incident_id)).map((e) => e.action),
-      ['sos.triggered', 'sos.retriggered'],
+      ['sos.triggered', 'incident.routed', 'sos.retriggered'],
     )
   })
 
@@ -175,7 +175,7 @@ describe('SOS', () => {
     assert.equal(retry.incident_id, first.incident_id)
     assert.deepEqual(
       (await ledgerFor(first.incident_id)).map((e) => e.action),
-      ['sos.triggered'],
+      ['sos.triggered', 'incident.routed'],
     )
   })
 
@@ -306,9 +306,9 @@ describe("I'm safe", () => {
       ])
       assert.deepEqual(
         rows.map((r) => r.action),
-        ['sos.triggered', 'sos.resolved'],
+        ['sos.triggered', 'incident.routed', 'sos.resolved'],
       )
-      assert.deepEqual(rows[1].payload, { resolution: 'safe' })
+      assert.deepEqual(rows[2].payload, { resolution: 'safe' })
     })
     // Her contacts are told it is still active.
     const view = await asAnon(async (c) => {

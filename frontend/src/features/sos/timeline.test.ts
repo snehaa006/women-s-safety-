@@ -48,4 +48,22 @@ describe('timeline labels', () => {
       'SOS sent from the app (queued offline, delivered later)',
     )
   })
+
+  it('describes the police response', () => {
+    expect(describeEntry(entry('incident.routed', { name: 'Tilak Marg PS' }))).toBe(
+      'Sent to Tilak Marg PS',
+    )
+    expect(
+      describeEntry(entry('incident.escalated', { to: 'parent', org_name: 'Control Room' })),
+    ).toBe('Not acknowledged in time: raised to Control Room')
+    expect(describeEntry(entry('incident.escalated', { to: 'parent', oversight: true }))).toBe(
+      'Still not acknowledged: oversight notified',
+    )
+    expect(describeEntry(entry('incident.dispatched', { unit: 'CP-PCR-1', eta_min: 6 }))).toBe(
+      'CP-PCR-1 sent, ETA 6 min',
+    )
+    expect(describeEntry(entry('incident.closed', { code: 'false_alarm' }))).toBe(
+      'Closed by police: false alarm',
+    )
+  })
 })

@@ -98,6 +98,8 @@ export default function MapView({
             '#2547b8',
             'hospital',
             '#0f8a5f',
+            'sos',
+            RED,
             '#6b7280',
           ],
           'circle-stroke-color': '#ffffff',

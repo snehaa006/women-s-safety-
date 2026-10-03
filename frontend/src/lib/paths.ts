@@ -32,6 +32,6 @@ export const paths = {
       `/console/cases/${caseId}/evidence/${evidenceId}`,
     map: '/console/map',
     reviews: '/console/reviews',
-    admin: (section = 'stations') => `/console/admin/${section}`,
+    admin: (section = 'escalation') => `/console/admin/${section}`,
   },
 } as const

@@ -112,7 +112,7 @@ describe('organizations', () => {
     const priya = await createUser('Priya')
     await asUser(priya, async (c) => {
       const { rows } = await c.query('select count(*)::int as n from public.organizations')
-      assert.equal(rows[0].n, 5)
+      assert.equal(rows[0].n, 6) // the demo district: control room, 4 stations, 1 campus desk
       await assert.rejects(
         c.query(`insert into public.organizations (name, type) values ('Fake', 'police_station')`),
         /row-level security/,
@@ -137,20 +137,30 @@ describe('public API surface', () => {
     assert.deepEqual(
       rows.map((r) => r.proname),
       [
+        'acknowledge_incident',
+        'admin_load_demo_incidents',
+        'admin_set_escalation_policy',
         'admin_set_role',
         'claim_alerts',
+        'close_incident',
+        'console_board',
+        'console_incident',
         'create_sos',
         'device_event',
         'disconnect_telegram',
+        'dispatch_unit',
         'finish_alert',
+        'incident_response',
         'incident_timeline',
         'ledger_verify',
         'link_telegram',
+        'mark_on_scene',
         'record_location',
         'register_device',
         'reset_device_secret',
         'resolve_incident',
         'respond_to_share_link',
+        'set_on_duty',
         'set_sos_pins',
         'sos_pin_status',
         'unlink_telegram_chat',

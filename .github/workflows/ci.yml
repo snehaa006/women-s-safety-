@@ -31,8 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # Same major version as hosted Supabase.
-        image: postgres:17
+        # Same major version as hosted Supabase, with PostGIS for jurisdictions.
+        image: postgis/postgis:17-3.5
         env:
           POSTGRES_PASSWORD: postgres
         ports:

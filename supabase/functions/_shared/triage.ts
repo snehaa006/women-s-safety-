@@ -47,16 +47,17 @@ export const CATEGORIES = [
 // The "latest" alias follows Google's current Flash model; TRIAGE_MODEL pins another one.
 export const DEFAULT_MODEL = 'gemini-flash-latest'
 
-/** The JSON the model must return (Gemini's controlled generation, OpenAPI schema subset). */
+/** The JSON the model must return (Gemini's controlled generation: an OpenAPI schema subset with
+ * upper-case type names; integer enums aren't supported, so severity uses minimum/maximum). */
 export const RESULT_SCHEMA = {
-  type: 'object',
+  type: 'OBJECT',
   properties: {
-    category: { type: 'string', enum: [...CATEGORIES] },
-    severity: { type: 'integer', minimum: 1, maximum: 5 },
-    confidence: { type: 'number' },
-    signals: { type: 'array', items: { type: 'string' } },
-    rationale: { type: 'string' },
-    legal_tags: { type: 'array', items: { type: 'string' } },
+    category: { type: 'STRING', enum: [...CATEGORIES] },
+    severity: { type: 'INTEGER', minimum: 1, maximum: 5 },
+    confidence: { type: 'NUMBER' },
+    signals: { type: 'ARRAY', items: { type: 'STRING' } },
+    rationale: { type: 'STRING' },
+    legal_tags: { type: 'ARRAY', items: { type: 'STRING' } },
   },
   required: ['category', 'severity', 'confidence', 'signals', 'rationale', 'legal_tags'],
   propertyOrdering: ['category', 'severity', 'confidence', 'signals', 'rationale', 'legal_tags'],

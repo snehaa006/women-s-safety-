@@ -100,6 +100,216 @@ export type Database = {
           },
         ]
       }
+      case_events: {
+        Row: {
+          accuracy_m: number | null
+          author_id: string
+          body: string | null
+          case_id: string
+          created_at: string
+          distance_m: number | null
+          id: string
+          kind: string
+          lat: number | null
+          lng: number | null
+          within_geofence: boolean | null
+        }
+        Insert: {
+          accuracy_m?: number | null
+          author_id: string
+          body?: string | null
+          case_id: string
+          created_at?: string
+          distance_m?: number | null
+          id?: string
+          kind: string
+          lat?: number | null
+          lng?: number | null
+          within_geofence?: boolean | null
+        }
+        Update: {
+          accuracy_m?: number | null
+          author_id?: string
+          body?: string | null
+          case_id?: string
+          created_at?: string
+          distance_m?: number | null
+          id?: string
+          kind?: string
+          lat?: number | null
+          lng?: number | null
+          within_geofence?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'case_events_author_id_fkey'
+            columns: ['author_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'case_events_case_id_fkey'
+            columns: ['case_id']
+            isOneToOne: false
+            referencedRelation: 'cases'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      case_evidence: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          case_id: string
+          custodian_id: string | null
+          evidence_id: string
+          locked_at: string | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          case_id: string
+          custodian_id?: string | null
+          evidence_id: string
+          locked_at?: string | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          case_id?: string
+          custodian_id?: string | null
+          evidence_id?: string
+          locked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'case_evidence_added_by_fkey'
+            columns: ['added_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'case_evidence_case_id_fkey'
+            columns: ['case_id']
+            isOneToOne: false
+            referencedRelation: 'cases'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'case_evidence_custodian_id_fkey'
+            columns: ['custodian_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'case_evidence_evidence_id_fkey'
+            columns: ['evidence_id']
+            isOneToOne: false
+            referencedRelation: 'evidence_items'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      cases: {
+        Row: {
+          complaint_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          incident_id: string | null
+          lat: number | null
+          lead_officer_id: string
+          lng: number | null
+          org_id: string
+          reference: string
+          state: string
+          status: string
+          title: string
+          updated_at: string
+          workflow_id: string
+        }
+        Insert: {
+          complaint_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          incident_id?: string | null
+          lat?: number | null
+          lead_officer_id: string
+          lng?: number | null
+          org_id: string
+          reference: string
+          state: string
+          status?: string
+          title: string
+          updated_at?: string
+          workflow_id: string
+        }
+        Update: {
+          complaint_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          incident_id?: string | null
+          lat?: number | null
+          lead_officer_id?: string
+          lng?: number | null
+          org_id?: string
+          reference?: string
+          state?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'cases_complaint_id_fkey'
+            columns: ['complaint_id']
+            isOneToOne: false
+            referencedRelation: 'complaints'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cases_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cases_incident_id_fkey'
+            columns: ['incident_id']
+            isOneToOne: false
+            referencedRelation: 'incidents'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cases_lead_officer_id_fkey'
+            columns: ['lead_officer_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cases_org_id_fkey'
+            columns: ['org_id']
+            isOneToOne: false
+            referencedRelation: 'organizations'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cases_workflow_id_fkey'
+            columns: ['workflow_id']
+            isOneToOne: false
+            referencedRelation: 'workflow_definitions'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       complaint_sla: {
         Row: {
           ack_s: number
@@ -254,6 +464,73 @@ export type Database = {
             columns: ['incident_id']
             isOneToOne: false
             referencedRelation: 'incidents'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      custody_transfers: {
+        Row: {
+          accepted_at: string | null
+          case_id: string
+          completed_at: string | null
+          evidence_id: string
+          from_user: string
+          id: string
+          initiated_at: string
+          reason: string
+          rehash_ok: boolean | null
+          rehash_sha256: string | null
+          status: string
+          to_user: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          case_id: string
+          completed_at?: string | null
+          evidence_id: string
+          from_user: string
+          id?: string
+          initiated_at?: string
+          reason: string
+          rehash_ok?: boolean | null
+          rehash_sha256?: string | null
+          status?: string
+          to_user: string
+        }
+        Update: {
+          accepted_at?: string | null
+          case_id?: string
+          completed_at?: string | null
+          evidence_id?: string
+          from_user?: string
+          id?: string
+          initiated_at?: string
+          reason?: string
+          rehash_ok?: boolean | null
+          rehash_sha256?: string | null
+          status?: string
+          to_user?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'custody_transfers_case_id_evidence_id_fkey'
+            columns: ['case_id', 'evidence_id']
+            isOneToOne: false
+            referencedRelation: 'case_evidence'
+            referencedColumns: ['case_id', 'evidence_id']
+          },
+          {
+            foreignKeyName: 'custody_transfers_from_user_fkey'
+            columns: ['from_user']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'custody_transfers_to_user_fkey'
+            columns: ['to_user']
+            isOneToOne: false
+            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -413,6 +690,185 @@ export type Database = {
             columns: ['updated_by']
             isOneToOne: false
             referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      evidence_items: {
+        Row: {
+          accuracy_m: number | null
+          captured_at: string | null
+          client_id: string | null
+          complaint_id: string | null
+          created_at: string
+          delete_after: string | null
+          deleted_at: string | null
+          file_name: string
+          id: string
+          incident_id: string | null
+          kind: string
+          lat: number | null
+          lng: number | null
+          mime_type: string
+          note: string | null
+          owner_id: string
+          reject_reason: string | null
+          sealed_at: string | null
+          sealed_seq: number | null
+          sha256: string
+          shared_at: string | null
+          size_bytes: number
+          source: string
+          status: string
+          storage_path: string
+          updated_at: string
+          uploaded_at: string | null
+        }
+        Insert: {
+          accuracy_m?: number | null
+          captured_at?: string | null
+          client_id?: string | null
+          complaint_id?: string | null
+          created_at?: string
+          delete_after?: string | null
+          deleted_at?: string | null
+          file_name: string
+          id?: string
+          incident_id?: string | null
+          kind?: string
+          lat?: number | null
+          lng?: number | null
+          mime_type: string
+          note?: string | null
+          owner_id: string
+          reject_reason?: string | null
+          sealed_at?: string | null
+          sealed_seq?: number | null
+          sha256: string
+          shared_at?: string | null
+          size_bytes: number
+          source?: string
+          status?: string
+          storage_path: string
+          updated_at?: string
+          uploaded_at?: string | null
+        }
+        Update: {
+          accuracy_m?: number | null
+          captured_at?: string | null
+          client_id?: string | null
+          complaint_id?: string | null
+          created_at?: string
+          delete_after?: string | null
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          incident_id?: string | null
+          kind?: string
+          lat?: number | null
+          lng?: number | null
+          mime_type?: string
+          note?: string | null
+          owner_id?: string
+          reject_reason?: string | null
+          sealed_at?: string | null
+          sealed_seq?: number | null
+          sha256?: string
+          shared_at?: string | null
+          size_bytes?: number
+          source?: string
+          status?: string
+          storage_path?: string
+          updated_at?: string
+          uploaded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'evidence_items_complaint_id_fkey'
+            columns: ['complaint_id']
+            isOneToOne: false
+            referencedRelation: 'complaints'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'evidence_items_incident_id_fkey'
+            columns: ['incident_id']
+            isOneToOne: false
+            referencedRelation: 'incidents'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'evidence_items_owner_id_fkey'
+            columns: ['owner_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      evidence_signatures: {
+        Row: {
+          capacity: string
+          case_id: string
+          evidence_id: string
+          id: string
+          key_fingerprint: string
+          material: string
+          payload_sha256: string
+          purpose: string
+          signature: string
+          signed_at: string
+          signer_id: string
+          transfer_id: string | null
+        }
+        Insert: {
+          capacity: string
+          case_id: string
+          evidence_id: string
+          id?: string
+          key_fingerprint: string
+          material: string
+          payload_sha256: string
+          purpose: string
+          signature: string
+          signed_at?: string
+          signer_id: string
+          transfer_id?: string | null
+        }
+        Update: {
+          capacity?: string
+          case_id?: string
+          evidence_id?: string
+          id?: string
+          key_fingerprint?: string
+          material?: string
+          payload_sha256?: string
+          purpose?: string
+          signature?: string
+          signed_at?: string
+          signer_id?: string
+          transfer_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'evidence_signatures_case_id_evidence_id_fkey'
+            columns: ['case_id', 'evidence_id']
+            isOneToOne: false
+            referencedRelation: 'case_evidence'
+            referencedColumns: ['case_id', 'evidence_id']
+          },
+          {
+            foreignKeyName: 'evidence_signatures_signer_id_fkey'
+            columns: ['signer_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'evidence_signatures_transfer_id_fkey'
+            columns: ['transfer_id']
+            isOneToOne: false
+            referencedRelation: 'custody_transfers'
             referencedColumns: ['id']
           },
         ]
@@ -655,6 +1111,54 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      ledger_anchors: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          from_seq: number
+          id: string
+          last_error: string | null
+          leaf_count: number
+          merkle_root: string
+          ots_calendar: string | null
+          ots_receipt: string | null
+          ots_status: string
+          submitted_at: string | null
+          to_seq: number
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          from_seq: number
+          id?: string
+          last_error?: string | null
+          leaf_count: number
+          merkle_root: string
+          ots_calendar?: string | null
+          ots_receipt?: string | null
+          ots_status?: string
+          submitted_at?: string | null
+          to_seq: number
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          from_seq?: number
+          id?: string
+          last_error?: string | null
+          leaf_count?: number
+          merkle_root?: string
+          ots_calendar?: string | null
+          ots_receipt?: string | null
+          ots_status?: string
+          submitted_at?: string | null
+          to_seq?: number
+        }
+        Relationships: []
       }
       ledger_entries: {
         Row: {
@@ -1169,6 +1673,44 @@ export type Database = {
           },
         ]
       }
+      workflow_definitions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          key: string
+          name: string
+          states: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key: string
+          name: string
+          states: Json
+          version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key?: string
+          name?: string
+          states?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'workflow_definitions_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1176,8 +1718,16 @@ export type Database = {
     Functions: {
       acknowledge_complaint: { Args: { p_complaint_id: string }; Returns: Json }
       acknowledge_incident: { Args: { p_incident_id: string }; Returns: Json }
+      add_case_note: {
+        Args: { p_body: string; p_case_id: string; p_kind: string }
+        Returns: Json
+      }
       admin_load_demo_complaints: { Args: never; Returns: number }
       admin_load_demo_incidents: { Args: never; Returns: number }
+      admin_save_workflow: {
+        Args: { p_key: string; p_name: string; p_states: Json }
+        Returns: Json
+      }
       admin_set_escalation_policy: {
         Args: { p_levels: Json; p_org_id: string; p_repeat_s: number }
         Returns: {
@@ -1216,6 +1766,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      advance_case: {
+        Args: { p_case_id: string; p_to_state: string }
+        Returns: Json
+      }
+      cancel_evidence_deletion: {
+        Args: { p_evidence_id: string }
+        Returns: undefined
+      }
+      case_checkin: {
+        Args: {
+          p_accuracy_m?: number
+          p_case_id: string
+          p_lat: number
+          p_lng: number
+        }
+        Returns: Json
+      }
       claim_alerts: {
         Args: { p_limit?: number }
         Returns: {
@@ -1235,6 +1802,24 @@ export type Database = {
           source: string
           started_at: string
           template: string
+        }[]
+      }
+      claim_anchors: {
+        Args: { p_limit?: number }
+        Returns: {
+          anchor_id: string
+          merkle_root: string
+        }[]
+      }
+      claim_evidence_checks: {
+        Args: { p_limit?: number }
+        Returns: {
+          check_id: string
+          evidence_id: string
+          purpose: string
+          sha256: string
+          size_bytes: number
+          storage_path: string
         }[]
       }
       claim_triage: {
@@ -1260,11 +1845,22 @@ export type Database = {
           seq: number
         }[]
       }
+      confirm_evidence_upload: {
+        Args: { p_evidence_id: string }
+        Returns: Json
+      }
       console_board: { Args: never; Returns: Json }
+      console_case: { Args: { p_case_id: string }; Returns: Json }
+      console_cases: { Args: never; Returns: Json }
       console_complaint: { Args: { p_complaint_id: string }; Returns: Json }
       console_complaints: { Args: never; Returns: Json }
+      console_evidence: {
+        Args: { p_case_id: string; p_evidence_id: string }
+        Returns: Json
+      }
       console_incident: { Args: { p_incident_id: string }; Returns: Json }
       console_reviews: { Args: never; Returns: Json }
+      console_workflows: { Args: never; Returns: Json }
       create_complaint: {
         Args: {
           p_accuracy_m?: number
@@ -1306,6 +1902,15 @@ export type Database = {
         }
         Returns: Json
       }
+      evidence_timeline: {
+        Args: { p_evidence_id: string }
+        Returns: {
+          action: string
+          occurred_at: string
+          payload: Json
+          seq: number
+        }[]
+      }
       finish_alert: {
         Args: {
           p_alert_id: string
@@ -1315,6 +1920,25 @@ export type Database = {
           p_retry?: boolean
         }
         Returns: string
+      }
+      finish_anchor: {
+        Args: {
+          p_anchor_id: string
+          p_calendar?: string
+          p_error?: string
+          p_receipt?: string
+        }
+        Returns: undefined
+      }
+      finish_evidence_check: {
+        Args: {
+          p_check_id: string
+          p_error?: string
+          p_retry?: boolean
+          p_sha256?: string
+          p_size_bytes?: number
+        }
+        Returns: Json
       }
       finish_triage: {
         Args: {
@@ -1371,6 +1995,15 @@ export type Database = {
           phone: string
         }[]
       }
+      open_case: {
+        Args: {
+          p_complaint_id?: string
+          p_incident_id?: string
+          p_title: string
+          p_workflow_key?: string
+        }
+        Returns: Json
+      }
       record_location: {
         Args: {
           p_accuracy_m?: number
@@ -1387,9 +2020,35 @@ export type Database = {
         Args: { p_kind?: string; p_name: string }
         Returns: Json
       }
+      register_evidence: {
+        Args: {
+          p_accuracy_m?: number
+          p_captured_at?: string
+          p_case_id?: string
+          p_client_id?: string
+          p_file_name: string
+          p_kind?: string
+          p_lat?: number
+          p_lng?: number
+          p_mime_type: string
+          p_note?: string
+          p_sha256: string
+          p_size_bytes: number
+          p_source?: string
+        }
+        Returns: Json
+      }
+      request_evidence_deletion: {
+        Args: { p_evidence_id: string }
+        Returns: Json
+      }
       reset_device_secret: { Args: { p_device_id: string }; Returns: Json }
       resolve_incident: {
         Args: { p_incident_id: string; p_pin?: string; p_resolution?: string }
+        Returns: Json
+      }
+      respond_custody_transfer: {
+        Args: { p_decision: string; p_transfer_id: string }
         Returns: Json
       }
       respond_to_share_link: {
@@ -1428,9 +2087,32 @@ export type Database = {
         Args: { p_complaint_id: string }
         Returns: undefined
       }
+      share_evidence: {
+        Args: {
+          p_complaint_id?: string
+          p_evidence_id: string
+          p_incident_id?: string
+        }
+        Returns: Json
+      }
+      sign_evidence_lock: {
+        Args: { p_case_id: string; p_evidence_id: string }
+        Returns: Json
+      }
       sos_pin_status: { Args: never; Returns: Json }
+      start_custody_transfer: {
+        Args: {
+          p_case_id: string
+          p_evidence_id: string
+          p_reason: string
+          p_to_user: string
+        }
+        Returns: Json
+      }
       triage_preview: { Args: { p_text: string }; Returns: Json }
       unlink_telegram_chat: { Args: { p_chat_id: number }; Returns: number }
+      vault_item: { Args: { p_evidence_id: string }; Returns: Json }
+      verify_evidence: { Args: { p_sha256: string }; Returns: Json }
       view_share_link: { Args: { p_token: string }; Returns: Json }
     }
     Enums: {
@@ -1452,12 +2134,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1477,12 +2159,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema['Tables'] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema['Tables']
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1501,12 +2184,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema['Tables'] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema['Tables']
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1525,12 +2209,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema['Enums'] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema['Enums']
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1541,12 +2226,13 @@ export type Enums<
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    keyof DefaultSchema['CompositeTypes'] | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    | keyof DefaultSchema['CompositeTypes']
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

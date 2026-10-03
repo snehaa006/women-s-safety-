@@ -150,7 +150,8 @@ Modules are domains, not servers. Each one owns its tables, its RLS policies and
 supabase/
   migrations/            # SQL: tables, RLS, RPC functions, triggers (one file per change)
   functions/             # Edge Functions (TypeScript, Deno)
-    notify/              # sends push, email, SMS for queued alerts
+    notify/              # sends queued alerts (email via Resend, Telegram)
+    telegram-webhook/    # the Telegram bot: links contacts' chats, /stop unlinks
     triage/              # AI scoring for complaints (Phase 3)
     _shared/             # shared helpers: Supabase client, CORS
   tests/                 # database tests on plain Postgres (node:test)
@@ -374,6 +375,8 @@ I3 fixes L5 at 3 min and L2 at 30 min. The other values are proposed defaults.
 
 - **Supabase Realtime** over WebSockets, using private channels: `incident:{id}`, `journey:{id}`, `org:{id}:live`, `org:{id}:queue`, `user:{id}`. RLS policies on `realtime.messages` decide who may join each channel.
 - Database triggers broadcast changes (incident status, acknowledgements, new queue items) to the right channel, so every write path produces the same live updates.
+- **Messages are pings, not data** (`{"what": "location"}`). The client refetches through the normal RLS-checked reads, so a broadcast can never leak more than a read would, and a missed ping only costs a refresh. Screens poll slowly while the socket is up and every 5 s while it is down.
+- The contact page (no account) listens on a **public** topic `live:<random>`. Only holders of a valid link learn its name (`view_share_link` returns it), and its pings carry nothing.
 - Location goes up through an RPC (`record_location`, batched), so it still works when the socket drops. A trigger broadcasts it to the incident's channel.
 - Trusted-contact live link `/t/:token`: 128-bit random token, stored hashed, read-only plus "I'm responding", expires 24 h after the incident closes.
 
@@ -388,6 +391,8 @@ I3 fixes L5 at 3 min and L2 at 30 min. The other values are proposed defaults.
 | 5 | SMS / WhatsApp (Twilio, Meta Cloud API) | Paid, or sandbox for testing | In India, commercial SMS needs DLT template registration and WhatsApp needs Meta business approval. Use sandboxes for the demo. |
 
 A delivery that fails or stays unacknowledged moves to the next channel. Every attempt is stored in `alerts`.
+
+**As built in Phase 1:** email (Resend) and Telegram. Each contact gets a personal live link, so the citizen sees who opened it. The `notify` function takes no input and runs without JWT verification: it only claims alerts the database already queued (`claim_alerts`, `FOR UPDATE SKIP LOCKED`) and reports each result (`finish_alert`, which writes the ledger), so calling it can do nothing but flush the queue. Telegram contacts link once through a one-time invite (`t.me/<bot>?start=<code>`); the chat id lives in `private.contact_telegram`. A channel without its key reports "skipped", never silence. Web Push arrives with the PWA service worker; SMS from the server waits on a provider (DLT in India).
 
 ---
 
@@ -584,7 +589,7 @@ frontend/src/
 
 - **Server state:** TanStack Query. Realtime messages update the cache directly.
 - **Client state:** a small Zustand store for the session, connection status and the active SOS.
-- **PWA:** installable, offline app shell, Web Push, and an **offline SOS queue** (IndexedDB + Background Sync) with the `sms:` fallback.
+- **PWA:** installable, offline app shell, Web Push, and an **offline SOS queue** (IndexedDB + Background Sync) with the `sms:` fallback. *(Phase 1 built the IndexedDB queue, the retries while the app is open and the SMS fallback; Background Sync needs the service worker.)*
 - **Browser APIs:** Geolocation, MediaRecorder, Web Crypto, WebAuthn, Screen Wake Lock, Vibration, Web Speech, Web Bluetooth (Android Chrome).
 
 ---
@@ -606,7 +611,7 @@ Key calls by phase:
 | Phase | Calls |
 |---|---|
 | P0 | `profiles` (own row), `organizations`, `rpc admin_set_role`, `rpc ledger_verify` |
-| P1 | `trusted_contacts`, `rpc create_sos`, `rpc record_location`, `rpc resolve_incident`, `rpc set_sos_pins`, `rpc sos_pin_status`, `rpc incident_timeline`, `rpc view_share_link`, `rpc respond_to_share_link`, `rpc register_device`, `rpc reset_device_secret`, `rpc device_event`; next: `functions/v1/notify` |
+| P1 | `trusted_contacts`, `rpc create_sos`, `rpc record_location`, `rpc resolve_incident`, `rpc set_sos_pins`, `rpc sos_pin_status`, `rpc incident_timeline`, `rpc view_share_link`, `rpc respond_to_share_link`, `rpc register_device`, `rpc reset_device_secret`, `rpc device_event`; `rpc nearby_safe_points`, `rpc disconnect_telegram`; service role only: `rpc claim_alerts`, `rpc finish_alert`, `rpc link_telegram`, `rpc unlink_telegram_chat`; Edge Functions `notify`, `telegram-webhook` |
 | P2 | `rpc acknowledge_incident`, `rpc dispatch_unit`, `escalation_policies` (admin) |
 | P3 | `rpc submit_complaint`, `rpc acknowledge_complaint`, `rpc set_complaint_severity`, `functions/v1/triage` |
 | P4 | `rpc register_evidence`, Storage upload, `functions/v1/verify-evidence`, `rpc transition_case`, `rpc sign_evidence`, `rpc start_custody_transfer`, `rpc accept_custody_transfer`, `rpc lookup_hash` |

@@ -4,7 +4,35 @@ import type { Tables } from '@/lib/database.types'
 import type { Fix } from './geo'
 
 export type Incident = Tables<'incidents'>
-export type Responder = Pick<Tables<'incident_responders'>, 'id' | 'name' | 'created_at'>
+export type Responder = Pick<
+  Tables<'incident_responders'>,
+  'id' | 'name' | 'created_at' | 'share_link_id'
+>
+export type Alert = Pick<
+  Tables<'alerts'>,
+  | 'id'
+  | 'contact_id'
+  | 'recipient_name'
+  | 'channel'
+  | 'template'
+  | 'status'
+  | 'sent_at'
+  | 'last_error'
+>
+export type ContactLink = Pick<
+  Tables<'share_links'>,
+  'id' | 'contact_id' | 'recipient_name' | 'first_viewed_at'
+>
+export type SafePoint = {
+  id: string
+  name: string
+  category: 'police' | 'hospital' | 'fire_station' | 'pharmacy'
+  lat: number
+  lng: number
+  phone: string | null
+  address: string | null
+  distance_m: number
+}
 
 export type SosStarted = { incident_id: string; share_token: string; created: boolean }
 export type ResolveStatus = 'resolved' | 'wrong_pin' | 'locked'
@@ -24,6 +52,10 @@ export type TimelineEntry = {
 /** What a trusted contact sees on /t/:token. */
 export type LiveView = {
   citizen_name: string | null
+  /** Set when the link was sent to one contact: "Asha". */
+  contact_name: string | null
+  /** Public Realtime topic that pings when something changes. */
+  channel: string
   citizen_phone: string | null
   status: 'active' | 'resolved'
   closed_under_duress: boolean
@@ -42,6 +74,9 @@ export const sosKeys = {
   recent: ['incidents', 'recent'] as const,
   incident: (id: string) => ['incidents', id] as const,
   responders: (id: string) => ['incidents', id, 'responders'] as const,
+  alerts: (id: string) => ['incidents', id, 'alerts'] as const,
+  safePoints: (lat: number, lng: number) =>
+    ['safe-points', lat.toFixed(3), lng.toFixed(3)] as const,
   path: (id: string) => ['incidents', id, 'path'] as const,
   timeline: (id: string) => ['incidents', id, 'timeline'] as const,
   pins: ['sos-pins'] as const,
@@ -53,13 +88,20 @@ export function closedForCitizen(incident: Pick<Incident, 'status' | 'closed_by_
   return incident.status !== 'active' || incident.closed_by_citizen_at !== null
 }
 
-export async function createSos(clientId: string, fix: Fix | null, batteryPct: number | null) {
+/** occurredAt is set when a queued (offline) SOS is sent later: when it was really pressed. */
+export async function createSos(
+  clientId: string,
+  fix: Fix | null,
+  batteryPct: number | null,
+  occurredAt?: string,
+) {
   const result = await db().rpc('create_sos', {
     p_client_id: clientId,
     p_lat: fix?.lat,
     p_lng: fix?.lng,
     p_accuracy_m: fix?.accuracy ?? undefined,
     p_battery_pct: batteryPct ?? undefined,
+    p_occurred_at: occurredAt,
   })
   return unwrap(result) as SosStarted
 }
@@ -96,6 +138,8 @@ export async function fetchIncident(id: string) {
     .from('incidents')
     .select('*, share_links(token)')
     .eq('id', id)
+    // Her own link; each alerted contact has a separate one.
+    .eq('share_links.audience', 'shared')
     .maybeSingle()
   const row = unwrap(result)
   if (!row) return null
@@ -126,10 +170,37 @@ export async function fetchRecentIncidents() {
 export async function fetchResponders(incidentId: string): Promise<Responder[]> {
   const result = await db()
     .from('incident_responders')
-    .select('id, name, created_at')
+    .select('id, name, created_at, share_link_id')
     .eq('incident_id', incidentId)
     .order('created_at')
   return unwrap(result)
+}
+
+/** What was sent to whom, and which contact links were opened. */
+export async function fetchAlerts(incidentId: string) {
+  const [alerts, links] = await Promise.all([
+    db()
+      .from('alerts')
+      .select('id, contact_id, recipient_name, channel, template, status, sent_at, last_error')
+      .eq('incident_id', incidentId)
+      .order('created_at'),
+    db()
+      .from('share_links')
+      .select('id, contact_id, recipient_name, first_viewed_at')
+      .eq('incident_id', incidentId)
+      .eq('audience', 'contact'),
+  ])
+  return { alerts: unwrap(alerts) as Alert[], links: unwrap(links) as ContactLink[] }
+}
+
+/** The nearest police stations and hospitals (anyone may call this, it is public data). */
+export async function fetchSafePoints(lat: number, lng: number) {
+  const result = await db().rpc('nearby_safe_points', {
+    p_lat: lat,
+    p_lng: lng,
+    p_per_category: 2,
+  })
+  return unwrap(result) as SafePoint[]
 }
 
 /** Location history as [lng, lat] pairs, oldest first. */

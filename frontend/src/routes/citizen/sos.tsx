@@ -23,6 +23,7 @@ import { LazyMap } from '@/features/map/lazy-map'
 import { mapsLink } from '@/features/map/links'
 import {
   closedForCitizen,
+  fetchAlerts,
   fetchIncident,
   fetchPath,
   fetchResponders,
@@ -30,10 +31,14 @@ import {
   type Incident,
   type ResolveResult,
 } from '@/features/sos/api'
+import { summarizeCircle, type ContactState } from '@/features/sos/circle-status'
 import { ResolveDialog } from '@/features/sos/resolve-dialog'
+import { SafePointsCard } from '@/features/sos/safe-points'
+import { useSafePoints } from '@/features/sos/use-safe-points'
 import { liveLinkUrl, smsLink, sosMessage, whatsappLink } from '@/features/sos/share'
 import { useLocationStream, type StreamStatus } from '@/features/sos/use-location-stream'
 import { paths } from '@/lib/paths'
+import { fallbackInterval, useLiveChannel } from '@/lib/realtime'
 import { formatTime, timeAgo } from '@/lib/time'
 import { useNow } from '@/lib/use-now'
 
@@ -50,10 +55,23 @@ export function Component() {
   // After the duress PIN the screen shows "safe" while this phone keeps sending location quietly.
   const [quietSharing, setQuietSharing] = useState(false)
 
+  // The database pings this topic on every change; each ping refetches what changed.
+  const live = useLiveChannel(incidentId ? `incident:${incidentId}` : null, (ping) => {
+    const keys =
+      ping.what === 'location'
+        ? [sosKeys.path(incidentId)]
+        : ping.what === 'responders'
+          ? [sosKeys.responders(incidentId), sosKeys.alerts(incidentId)]
+          : ping.what === 'alerts'
+            ? [sosKeys.alerts(incidentId)]
+            : [sosKeys.incident(incidentId)]
+    for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey })
+  })
+
   const query = useQuery({
     queryKey: sosKeys.incident(incidentId),
     queryFn: () => fetchIncident(incidentId),
-    refetchInterval: 15_000,
+    refetchInterval: live ? 30_000 : 15_000,
   })
   const incident = query.data?.incident
   const closed = closedHere || (incident ? closedForCitizen(incident) : false)
@@ -94,6 +112,7 @@ export function Component() {
       incident={incident}
       shareToken={query.data?.shareToken ?? null}
       stream={stream}
+      live={live}
       onResolved={onResolved}
     />
   )
@@ -103,24 +122,27 @@ function ActiveSos({
   incident,
   shareToken,
   stream,
+  live,
   onResolved,
 }: {
   incident: Incident
   shareToken: string | null
   stream: ReturnType<typeof useLocationStream>
+  live: boolean
   onResolved: (result: ResolveResult) => void
 }) {
   const now = useNow(10_000)
   const path = useQuery({
     queryKey: sosKeys.path(incident.id),
     queryFn: () => fetchPath(incident.id),
-    refetchInterval: 5000,
+    refetchInterval: fallbackInterval(live),
   })
   const current =
     stream.lastFix ??
     (incident.last_lat !== null && incident.last_lng !== null
       ? { lat: incident.last_lat, lng: incident.last_lng }
       : null)
+  const safePoints = useSafePoints(current)
 
   return (
     <div className="grid gap-5">
@@ -144,7 +166,7 @@ function ActiveSos({
         </a>
       </Button>
 
-      <Responders incidentId={incident.id} />
+      <CircleCard incidentId={incident.id} live={live} />
 
       <ShareCard shareToken={shareToken} />
 
@@ -161,6 +183,7 @@ function ActiveSos({
             className="h-64"
             path={path.data ?? []}
             current={current}
+            points={safePoints.data}
             label="Your live location and the route since the SOS started"
           />
           {current ? (
@@ -183,6 +206,8 @@ function ActiveSos({
           ) : null}
         </CardContent>
       </Card>
+
+      <SafePointsCard points={safePoints.data} pending={safePoints.isPending && !!current} />
 
       <ResolveDialog incidentId={incident.id} onResolved={onResolved} />
     </div>
@@ -220,34 +245,78 @@ function StreamLine({ status, source }: { status: StreamStatus; source: string }
   )
 }
 
-function Responders({ incidentId }: { incidentId: string }) {
+const STATE_STYLE: Record<ContactState, string> = {
+  responding: 'bg-emerald-600',
+  opened: 'bg-primary',
+  sent: 'bg-primary/60',
+  sending: 'bg-muted-foreground animate-pulse',
+  problem: 'bg-destructive',
+}
+
+/** Who was alerted, who opened the link, who is on the way. Updates live. */
+function CircleCard({ incidentId, live }: { incidentId: string; live: boolean }) {
   const responders = useQuery({
     queryKey: sosKeys.responders(incidentId),
     queryFn: () => fetchResponders(incidentId),
-    refetchInterval: 5000,
+    refetchInterval: fallbackInterval(live),
   })
-  const list = responders.data ?? []
+  const alerts = useQuery({
+    queryKey: sosKeys.alerts(incidentId),
+    queryFn: () => fetchAlerts(incidentId),
+    refetchInterval: fallbackInterval(live),
+  })
+  const people = summarizeCircle(
+    alerts.data?.alerts ?? [],
+    alerts.data?.links ?? [],
+    responders.data ?? [],
+  )
+  // People responding from her own shared link (not one sent to a contact).
+  const contactLinks = new Set((alerts.data?.links ?? []).map((l) => l.id))
+  const others = (responders.data ?? []).filter(
+    (r) => !r.share_link_id || !contactLinks.has(r.share_link_id),
+  )
 
   return (
     <Card className="gap-3" aria-live="polite">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <UserCheck className="text-primary size-5" aria-hidden />
-          Who's responding
+          Your circle
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        {list.length === 0 ? (
+      <CardContent className="grid gap-3">
+        {people.length === 0 && others.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No one yet. When a contact opens your live link and taps "I'm responding", they show up
-            here.
+            {alerts.isPending
+              ? 'Checking who was alerted…'
+              : 'No one was alerted automatically. Contacts need an email or Telegram for that; send your link below.'}
           </p>
         ) : (
           <ul className="grid gap-2">
-            {list.map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{r.name} is on the way</span>
-                <span className="text-muted-foreground text-sm">{formatTime(r.created_at)}</span>
+            {people.map((person) => (
+              <li key={person.key} className="flex items-start gap-3">
+                <span
+                  className={`mt-1.5 size-2.5 shrink-0 rounded-full ${STATE_STYLE[person.state]}`}
+                  aria-hidden
+                />
+                <span className="grid">
+                  <span className="font-semibold">{person.name}</span>
+                  <span className="text-muted-foreground text-sm">{person.detail}</span>
+                </span>
+              </li>
+            ))}
+            {others.map((r) => (
+              <li key={r.id} className="flex items-start gap-3">
+                <span
+                  className="mt-1.5 size-2.5 shrink-0 rounded-full bg-emerald-600"
+                  aria-hidden
+                />
+                <span className="grid">
+                  <span className="font-semibold">{r.name}</span>
+                  <span className="text-muted-foreground text-sm">
+                    Responding since {formatTime(r.created_at)}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>
@@ -287,8 +356,8 @@ function ShareCard({ shareToken }: { shareToken: string | null }) {
       </CardHeader>
       <CardContent className="grid gap-3">
         <p className="text-muted-foreground text-sm">
-          Anyone with this link can see where you are until 24 hours after you end the SOS.
-          Automatic alerts to your circle come in the next update; for now, send it here.
+          Your circle got their own links automatically. Send this one to anyone else: it shows
+          where you are until 24 hours after you end the SOS.
         </p>
         <div className="grid grid-cols-2 gap-2">
           <Button asChild size="touch">

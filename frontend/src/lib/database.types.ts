@@ -11,6 +11,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      alerts: {
+        Row: {
+          acked_at: string | null
+          attempts: number
+          channel: string
+          citizen_id: string
+          contact_id: string | null
+          created_at: string
+          id: string
+          incident_id: string
+          last_error: string | null
+          level: number
+          next_attempt_at: string
+          provider_ref: string | null
+          recipient_name: string
+          sent_at: string | null
+          share_link_id: string | null
+          status: string
+          template: string
+          updated_at: string
+        }
+        Insert: {
+          acked_at?: string | null
+          attempts?: number
+          channel: string
+          citizen_id: string
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          incident_id: string
+          last_error?: string | null
+          level?: number
+          next_attempt_at?: string
+          provider_ref?: string | null
+          recipient_name: string
+          sent_at?: string | null
+          share_link_id?: string | null
+          status?: string
+          template: string
+          updated_at?: string
+        }
+        Update: {
+          acked_at?: string | null
+          attempts?: number
+          channel?: string
+          citizen_id?: string
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          incident_id?: string
+          last_error?: string | null
+          level?: number
+          next_attempt_at?: string
+          provider_ref?: string | null
+          recipient_name?: string
+          sent_at?: string | null
+          share_link_id?: string | null
+          status?: string
+          template?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'alerts_citizen_id_fkey'
+            columns: ['citizen_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'alerts_contact_id_fkey'
+            columns: ['contact_id']
+            isOneToOne: false
+            referencedRelation: 'trusted_contacts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'alerts_incident_id_fkey'
+            columns: ['incident_id']
+            isOneToOne: false
+            referencedRelation: 'incidents'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'alerts_share_link_id_fkey'
+            columns: ['share_link_id']
+            isOneToOne: false
+            referencedRelation: 'share_links'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       device_events: {
         Row: {
           accuracy_m: number | null
@@ -190,6 +282,7 @@ export type Database = {
           last_lng: number | null
           last_location_at: string | null
           ledger_batch_at: string
+          live_topic: string
           resolution: string | null
           resolved_at: string | null
           source: string
@@ -208,6 +301,7 @@ export type Database = {
           last_lng?: number | null
           last_location_at?: string | null
           ledger_batch_at?: string
+          live_topic?: string
           resolution?: string | null
           resolved_at?: string | null
           source: string
@@ -226,6 +320,7 @@ export type Database = {
           last_lng?: number | null
           last_location_at?: string | null
           ledger_batch_at?: string
+          live_topic?: string
           resolution?: string | null
           resolved_at?: string | null
           source?: string
@@ -476,32 +571,86 @@ export type Database = {
         }
         Relationships: []
       }
+      safe_points: {
+        Row: {
+          address: string | null
+          category: string
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+          opening_hours: string | null
+          osm_ref: string | null
+          phone: string | null
+          source: string
+          verified: boolean
+        }
+        Insert: {
+          address?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          name: string
+          opening_hours?: string | null
+          osm_ref?: string | null
+          phone?: string | null
+          source: string
+          verified?: boolean
+        }
+        Update: {
+          address?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+          opening_hours?: string | null
+          osm_ref?: string | null
+          phone?: string | null
+          source?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       share_links: {
         Row: {
+          audience: string
           citizen_id: string
+          contact_id: string | null
           created_at: string
           expires_at: string | null
           first_viewed_at: string | null
           id: string
           incident_id: string
+          recipient_name: string | null
           token: string
         }
         Insert: {
+          audience?: string
           citizen_id: string
+          contact_id?: string | null
           created_at?: string
           expires_at?: string | null
           first_viewed_at?: string | null
           id?: string
           incident_id: string
+          recipient_name?: string | null
           token?: string
         }
         Update: {
+          audience?: string
           citizen_id?: string
+          contact_id?: string | null
           created_at?: string
           expires_at?: string | null
           first_viewed_at?: string | null
           id?: string
           incident_id?: string
+          recipient_name?: string | null
           token?: string
         }
         Relationships: [
@@ -510,6 +659,13 @@ export type Database = {
             columns: ['citizen_id']
             isOneToOne: false
             referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'share_links_contact_id_fkey'
+            columns: ['contact_id']
+            isOneToOne: false
+            referencedRelation: 'trusted_contacts'
             referencedColumns: ['id']
           },
           {
@@ -531,6 +687,9 @@ export type Database = {
           phone: string | null
           priority: number
           relationship: string | null
+          telegram_code: string
+          telegram_linked_at: string | null
+          telegram_username: string | null
           updated_at: string
         }
         Insert: {
@@ -542,6 +701,9 @@ export type Database = {
           phone?: string | null
           priority?: number
           relationship?: string | null
+          telegram_code?: string
+          telegram_linked_at?: string | null
+          telegram_username?: string | null
           updated_at?: string
         }
         Update: {
@@ -553,6 +715,9 @@ export type Database = {
           phone?: string | null
           priority?: number
           relationship?: string | null
+          telegram_code?: string
+          telegram_linked_at?: string | null
+          telegram_username?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -591,6 +756,27 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      claim_alerts: {
+        Args: { p_limit?: number }
+        Returns: {
+          address: string
+          alert_id: string
+          attempts: number
+          channel: string
+          citizen_name: string
+          citizen_phone: string
+          incident_status: string
+          lat: number
+          level: number
+          link_token: string
+          lng: number
+          location_at: string
+          recipient_name: string
+          source: string
+          started_at: string
+          template: string
+        }[]
+      }
       create_sos: {
         Args: {
           p_accuracy_m?: number
@@ -598,12 +784,27 @@ export type Database = {
           p_client_id?: string
           p_lat?: number
           p_lng?: number
+          p_occurred_at?: string
         }
         Returns: Json
       }
       device_event: {
         Args: { p_body: string; p_device_id: string; p_signature: string }
         Returns: Json
+      }
+      disconnect_telegram: {
+        Args: { p_contact_id: string }
+        Returns: undefined
+      }
+      finish_alert: {
+        Args: {
+          p_alert_id: string
+          p_error?: string
+          p_outcome: string
+          p_provider_ref?: string
+          p_retry?: boolean
+        }
+        Returns: string
       }
       incident_timeline: {
         Args: { p_incident_id: string }
@@ -624,6 +825,28 @@ export type Database = {
           first_bad_seq: number
           ok: boolean
           reason: string
+        }[]
+      }
+      link_telegram: {
+        Args: { p_chat_id: number; p_code: string; p_username?: string }
+        Returns: Json
+      }
+      nearby_safe_points: {
+        Args: {
+          p_lat: number
+          p_lng: number
+          p_per_category?: number
+          p_radius_m?: number
+        }
+        Returns: {
+          address: string
+          category: string
+          distance_m: number
+          id: string
+          lat: number
+          lng: number
+          name: string
+          phone: string
         }[]
       }
       record_location: {
@@ -660,6 +883,7 @@ export type Database = {
         Returns: Json
       }
       sos_pin_status: { Args: never; Returns: Json }
+      unlink_telegram_chat: { Args: { p_chat_id: number }; Returns: number }
       view_share_link: { Args: { p_token: string }; Returns: Json }
     }
     Enums: {

@@ -67,7 +67,7 @@ path and no cold start.
 
 | Type | Gesture on the keychain | Server effect |
 |---|---|---|
-| `sos` | Long press (3 s) | Starts an SOS for the owner, exactly like the app button (source `simulator` or `device`), with the position as its first point and a ledger entry naming the device. If an SOS is already active, it is reused. |
+| `sos` | Long press (3 s) | Starts an SOS for the owner, exactly like the app button (source `simulator` or `device`), with the position as its first point and a ledger entry naming the device. If an SOS is already active, it is reused. The circle is alerted automatically, exactly as for the app button. |
 | `location` | Every few seconds during an SOS | Adds a point to the owner's active SOS. Without one, it only updates the device's last position. |
 | `heartbeat` | Every few minutes | Updates last seen and battery. |
 | `gesture` | 1 click: fake call · 2 clicks: stealth recording | Stored. The phone acts on it from Phase 7. |

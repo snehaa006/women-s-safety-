@@ -1,10 +1,23 @@
-import { House, Lock, LogOut, Map, MessageSquareWarning, Settings, Users } from 'lucide-react'
+import {
+  House,
+  Lock,
+  LogOut,
+  Map,
+  MessageSquareWarning,
+  Settings,
+  Users,
+  WifiOff,
+} from 'lucide-react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router'
 
 import { Brand } from '@/components/brand'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/auth-context'
+import { rememberedPhones } from '@/features/circle/api'
+import { useOutbox } from '@/features/sos/outbox'
+import { offlineSosMessage, smsLink } from '@/features/sos/share'
 import { SosQuickButton } from '@/features/sos/sos-button'
+import { useOutboxSender } from '@/features/sos/use-outbox-sender'
 import { ThemeToggle } from '@/features/theme/theme-toggle'
 import { paths } from '@/lib/paths'
 import { cn } from '@/lib/utils'
@@ -18,8 +31,11 @@ const tabs = [
 ] as const
 
 export function CitizenLayout() {
-  const { client } = useAuth()
+  const auth = useAuth()
+  const { client } = auth
   const navigate = useNavigate()
+  const outbox = useOutbox()
+  useOutboxSender()
 
   async function signOut() {
     await client.signOut()
@@ -32,7 +48,7 @@ export function CitizenLayout() {
         <div className="mx-auto flex h-14 w-full max-w-2xl items-center justify-between gap-2 px-4">
           <Brand to={paths.app.home} />
           <div className="flex items-center gap-1">
-            <SosQuickButton />
+            <SosQuickButton userId={auth.status === 'signed-in' ? auth.profile.id : undefined} />
             <Button asChild variant="ghost" size="icon" aria-label="Settings">
               <Link to={paths.app.settings}>
                 <Settings />
@@ -45,6 +61,23 @@ export function CitizenLayout() {
           </div>
         </div>
       </header>
+
+      {outbox.pending.length > 0 ? (
+        <div role="status" className="bg-sos text-sos-foreground">
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm">
+            <WifiOff className="size-4" aria-hidden />
+            <span className="flex-1 font-semibold">
+              SOS saved on this phone. It sends as soon as you're back online.
+            </span>
+            <a
+              className="underline"
+              href={smsLink(rememberedPhones(), offlineSosMessage(outbox.pending[0].fix))}
+            >
+              Text my circle
+            </a>
+          </div>
+        </div>
+      ) : null}
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-6 pb-28">
         <Outlet />

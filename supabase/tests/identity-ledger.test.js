@@ -138,10 +138,14 @@ describe('public API surface', () => {
       rows.map((r) => r.proname),
       [
         'admin_set_role',
+        'claim_alerts',
         'create_sos',
         'device_event',
+        'disconnect_telegram',
+        'finish_alert',
         'incident_timeline',
         'ledger_verify',
+        'link_telegram',
         'record_location',
         'register_device',
         'reset_device_secret',
@@ -149,20 +153,36 @@ describe('public API surface', () => {
         'respond_to_share_link',
         'set_sos_pins',
         'sos_pin_status',
+        'unlink_telegram_chat',
         'view_share_link',
       ],
     )
   })
 
-  it('lets anonymous visitors call only the live-link and device RPCs', async () => {
+  it('lets anonymous visitors call only the live-link, device and safe-point RPCs', async () => {
     const { rows } = await db.query(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('public', 'private') and has_function_privilege('anon', p.oid, 'execute')
       order by p.proname`)
     assert.deepEqual(
       rows.map((r) => r.proname),
-      ['device_event', 'respond_to_share_link', 'view_share_link'],
+      ['device_event', 'nearby_safe_points', 'respond_to_share_link', 'view_share_link'],
     )
+  })
+
+  it('keeps the sending and Telegram-linking RPCs for the service role only', async () => {
+    const { rows } = await db.query(`
+      select p.proname,
+             has_function_privilege('authenticated', p.oid, 'execute') as signed_in,
+             has_function_privilege('service_role', p.oid, 'execute') as service
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname in ('claim_alerts', 'finish_alert', 'link_telegram', 'unlink_telegram_chat')
+      order by p.proname`)
+    assert.equal(rows.length, 4)
+    for (const row of rows) {
+      assert.deepEqual([row.signed_in, row.service], [false, true], row.proname)
+    }
   })
 })
 

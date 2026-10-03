@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  fetchAlerts,
   fetchIncident,
   fetchPinStatus,
   resolveIncident,
@@ -17,6 +18,19 @@ import { renderRoute } from '@/test/render-route'
 vi.mock('@/features/sos/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/sos/api')>()),
   fetchIncident: vi.fn(),
+  fetchAlerts: vi.fn(async () => ({ alerts: [], links: [] })),
+  fetchSafePoints: vi.fn(async () => [
+    {
+      id: 'sp-1',
+      name: 'Connaught Place Police Station',
+      category: 'police',
+      lat: 28.632,
+      lng: 77.219,
+      phone: '011 2341 2345',
+      address: null,
+      distance_m: 240,
+    },
+  ]),
   fetchPath: vi.fn(async () => []),
   fetchResponders: vi.fn(async () => []),
   fetchPinStatus: vi.fn(),
@@ -48,10 +62,13 @@ const incident: Incident = {
   last_battery_pct: 81,
   last_location_at: new Date().toISOString(),
   ledger_batch_at: new Date().toISOString(),
+  live_topic: 'topic-1',
 }
 
 const liveView: LiveView = {
   citizen_name: 'Priya',
+  contact_name: null,
+  channel: 'live:topic-1',
   citizen_phone: '+91 98765 43210',
   status: 'active',
   closed_under_duress: false,
@@ -112,7 +129,62 @@ describe('active SOS screen', () => {
   })
 })
 
+describe('your circle on the SOS screen', () => {
+  it('shows who was alerted, how, and who opened the link', async () => {
+    vi.mocked(fetchAlerts).mockResolvedValue({
+      alerts: [
+        {
+          id: 'a1',
+          contact_id: 'c-asha',
+          recipient_name: 'Asha',
+          channel: 'email',
+          template: 'sos',
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          last_error: null,
+        },
+        {
+          id: 'a2',
+          contact_id: 'c-ravi',
+          recipient_name: 'Ravi',
+          channel: 'telegram',
+          template: 'sos',
+          status: 'skipped',
+          sent_at: null,
+          last_error: 'Telegram is not set up yet',
+        },
+      ],
+      links: [
+        {
+          id: 'l1',
+          contact_id: 'c-asha',
+          recipient_name: 'Asha',
+          first_viewed_at: new Date().toISOString(),
+        },
+      ],
+    })
+    renderRoute('/app/sos/inc-1', createFakeAuthClient(citizen))
+    expect(await screen.findByText(/Opened your live link at/)).toBeInTheDocument()
+    expect(screen.getByText('Telegram not sent: Telegram is not set up yet')).toBeInTheDocument()
+  })
+
+  it('shows the nearest police station', async () => {
+    renderRoute('/app/sos/inc-1', createFakeAuthClient(citizen))
+    expect(await screen.findByText('Connaught Place Police Station')).toBeInTheDocument()
+    expect(screen.getByText('Police · 240 m')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Call Connaught Place Police Station' }),
+    ).toHaveAttribute('href', 'tel:01123412345')
+  })
+})
+
 describe('live link for trusted contacts', () => {
+  it('greets a contact by name on their own link', async () => {
+    vi.mocked(viewLiveLink).mockResolvedValue({ ...liveView, contact_name: 'Asha' })
+    renderRoute('/t/tok-123', createFakeAuthClient())
+    expect(await screen.findByLabelText('Your name')).toHaveValue('Asha')
+  })
+
   it('shows who needs help, where, and how to reach them', async () => {
     renderRoute('/t/tok-123', createFakeAuthClient())
     expect(await screen.findByRole('heading', { name: 'Priya needs help' })).toBeInTheDocument()

@@ -121,6 +121,7 @@ flowchart TD
 - Timeouts and targets come from `escalation_policies`, not code.
 - Every escalation step appends a ledger entry. A missed SLA is permanently visible in reviews.
 - Acknowledging is one click, and the first acknowledgement stops the ladder for everyone.
+- **Built in Phase 1 (contacts only):** L0 alerts the circle in the SOS transaction; a `sos.reminder` job 2 minutes later re-alerts the circle and records `sos.no_response` unless someone is responding. Phase 2 adds officers, supervisors and the policy table.
 
 ---
 
@@ -143,6 +144,8 @@ flowchart TD
 - GPS works without data, so the SMS always carries coordinates (`https://maps.google.com/?q=lat,lng`).
 - A queued SOS keeps its **original** trigger time. The ledger records both when it happened and when the server received it.
 - The wearable's modem handles its own SMS fallback ([§13](#13-wearable-gestures)).
+- The queued SOS keeps its client id, so sending it twice can never create two incidents. The server refuses times in the future or more than a day old.
+- Until the service worker exists, the queue is sent while the app is open (on start, on the browser's `online` event, and with backoff). The SMS fallback does not depend on it.
 
 ---
 

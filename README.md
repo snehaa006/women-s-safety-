@@ -2,7 +2,7 @@
 
 A web platform (React PWA on a Supabase backend) that **gets help to a woman in danger within seconds** and **makes the response accountable**. Every alert, action and piece of evidence is time-stamped, hashed and recorded in a tamper-evident ledger.
 
-> **Status:** Phase 1 part A is built: trusted circle, hold-to-send SOS, live location, a live link for contacts, SOS and duress PINs, the incident timeline, and a **virtual wearable** that stands in for the IoT keychain. The database runs on the Supabase project `women's safety`; the frontend deploys to Vercel. Next: automatic alerts to the circle and the offline queue.
+> **Status:** Phase 1 is built: trusted circle, hold-to-send SOS, live location, a live link for contacts, SOS and duress PINs, the incident timeline, a **virtual wearable** that stands in for the IoT keychain, **automatic alerts to the circle** (email and Telegram, with a reminder when nobody responds), **live updates over Supabase Realtime**, an **offline SOS queue** with SMS fallback, and **nearby police stations and hospitals**. The database runs on the Supabase project `women's safety`; the frontend deploys to Vercel. Next: Phase 2, the authority console and escalation.
 
 ## Design docs
 
@@ -28,7 +28,7 @@ A web platform (React PWA on a Supabase backend) that **gets help to a woman in 
 
 ```text
 frontend/     React PWA: citizen app, authority console, contact live view
-supabase/     SQL migrations, seed data, database tests (Edge Functions arrive with alerts)
+supabase/     SQL migrations, seed data, database tests, Edge Functions (notify, telegram-webhook)
 tools/        device-simulator.mjs: the wearable from the command line
 docs/         Design docs (the source of truth)
 .github/      CI: frontend checks and database tests on every PR
@@ -58,6 +58,9 @@ npm install
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 ```
 
+**Edge Function logic** (messages, channels, the Telegram bot) is plain TypeScript with Node tests:
+`node --test supabase/functions/tests/*.test.ts` (Node 22, no install).
+
 **Supabase project** (`fwhhgiajzrzsjeduenaj`): with the [Supabase CLI](https://supabase.com/docs/guides/local-development), `supabase link --project-ref fwhhgiajzrzsjeduenaj` then `supabase db push` applies new migrations. Locally, `supabase start` and `supabase db reset` also load `supabase/seed.sql`. To make someone staff, have them sign up, then run `select public.admin_set_role('<user id>', 'officer');` in the SQL editor.
 
 ## Mock data: the virtual wearable
@@ -76,6 +79,34 @@ DEVICE_ID=... DEVICE_SECRET=... node tools/device-simulator.mjs demo
 ```
 
 Details and demo recipes: [docs/05-device-protocol.md](docs/05-device-protocol.md).
+
+## Alerts: email and Telegram
+
+An SOS queues one alert per contact and channel in the database; Postgres calls the `notify`
+Edge Function, which sends them. Without keys it records each alert as "not sent: not set up
+yet" (visible on the SOS screen and timeline), so nothing fails silently. To switch channels on,
+add **Edge Function secrets** in the Supabase dashboard (Edge Functions → Secrets). Never commit
+them.
+
+| Secret | Channel | Notes |
+|---|---|---|
+| `RESEND_API_KEY` | Email via [Resend](https://resend.com) | Without a verified domain, Resend only delivers to your own address. |
+| `EMAIL_FROM` | Email | Optional. Default `Women's Safety <onboarding@resend.dev>`; use an address on your verified domain. |
+| `TELEGRAM_BOT_TOKEN` | Telegram | From [@BotFather](https://t.me/BotFather). Free, reaches anyone with Telegram. |
+| `TELEGRAM_WEBHOOK_SECRET` | Telegram | Any long random string; Telegram sends it back on every update. |
+| `SITE_URL` | Links in messages | Optional. Default `https://frontend-pi-lime-66.vercel.app`. |
+
+Then, for Telegram, point the bot at the webhook once:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d url=https://fwhhgiajzrzsjeduenaj.supabase.co/functions/v1/telegram-webhook \
+  -d secret_token=$TELEGRAM_WEBHOOK_SECRET
+```
+
+and set `VITE_TELEGRAM_BOT=<bot username>` in Vercel (or `frontend/.env.production`) so each
+contact's page shows a **Telegram invite** to send them. A contact opens it once and taps Start;
+`/stop` in the bot unsubscribes them.
 
 ## Deploy
 

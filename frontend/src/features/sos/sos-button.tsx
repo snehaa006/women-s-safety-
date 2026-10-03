@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PhoneCall, Siren } from 'lucide-react'
+import { MessageSquare, PhoneCall, Siren, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -8,8 +8,13 @@ import { Button } from '@/components/ui/button'
 import { paths } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 
+import { rememberedPhones } from '@/features/circle/api'
+import { useLiveChannel } from '@/lib/realtime'
+
 import { createSos, fetchActiveIncident, sosKeys } from './api'
 import { batteryPct, currentFix, type Fix } from './geo'
+import { enqueueSos, isNetworkError, useOutbox } from './outbox'
+import { offlineSosMessage, smsLink } from './share'
 import { useHold } from './use-hold'
 
 export const HOLD_MS = 1500
@@ -20,6 +25,7 @@ type Phase =
   | { kind: 'countdown'; secondsLeft: number }
   | { kind: 'sending' }
   | { kind: 'error'; message: string }
+  | { kind: 'queued'; clientId: string; fix: Fix | null }
 
 const delay = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))
 
@@ -46,18 +52,36 @@ export function SosHoldButton({ className }: { className?: string }) {
   const send = useCallback(async () => {
     pending.current ??= { clientId: crypto.randomUUID(), fix: currentFix(3000) }
     const { clientId, fix } = pending.current
+    const pressedAt = new Date().toISOString()
     setPhase({ kind: 'sending' })
+    const position = await Promise.race([fix, delay(1500)])
+    const battery = await batteryPct()
     try {
-      const position = await Promise.race([fix, delay(1500)])
-      const result = await createSos(clientId, position, await batteryPct())
+      const result = await createSos(clientId, position, battery)
       pending.current = null
       vibrate([200, 100, 200])
       await queryClient.invalidateQueries({ queryKey: ['incidents'] })
       navigate(paths.app.sos(result.incident_id))
     } catch (error) {
+      if (isNetworkError(error)) {
+        // No connection: keep it on the phone and send it, with this time, once back online.
+        await enqueueSos({ clientId, occurredAt: pressedAt, fix: position, batteryPct: battery })
+        pending.current = null
+        vibrate([200, 100, 200])
+        setPhase({ kind: 'queued', clientId, fix: position })
+        return
+      }
       setPhase({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
     }
   }, [navigate, queryClient])
+
+  // The queued SOS went through: open it.
+  const outbox = useOutbox()
+  const queuedId = phase.kind === 'queued' ? phase.clientId : null
+  const delivered = queuedId ? outbox.sent.find((s) => s.clientId === queuedId) : undefined
+  useEffect(() => {
+    if (delivered) navigate(paths.app.sos(delivered.incidentId))
+  }, [delivered, navigate])
 
   const hold = useHold(HOLD_MS, () => {
     pending.current = { clientId: crypto.randomUUID(), fix: currentFix(COUNTDOWN_S * 1000 + 1000) }
@@ -77,6 +101,10 @@ export function SosHoldButton({ className }: { className?: string }) {
   function cancel() {
     pending.current = null
     setPhase({ kind: 'idle' })
+  }
+
+  if (phase.kind === 'queued') {
+    return <OfflineSos className={className} fix={phase.fix} />
   }
 
   if (phase.kind === 'countdown' || phase.kind === 'sending') {
@@ -159,12 +187,51 @@ export function SosHoldButton({ className }: { className?: string }) {
   )
 }
 
+/**
+ * Shown when the SOS couldn't reach the server. It is saved on the phone and sent automatically
+ * once there is a connection; meanwhile one tap texts the circle with the GPS position.
+ */
+export function OfflineSos({ fix, className }: { fix: Fix | null; className?: string }) {
+  const phones = rememberedPhones()
+  return (
+    <div className={cn('grid gap-4', className)} role="alert">
+      <div className="bg-sos text-sos-foreground grid gap-1 rounded-xl p-5 shadow-md">
+        <p className="flex items-center gap-2 text-xl font-extrabold">
+          <WifiOff className="size-6" aria-hidden />
+          No connection. Your SOS is saved.
+        </p>
+        <p className="text-sos-foreground/90">
+          It will be sent automatically, with the time you pressed it, as soon as this phone is back
+          online. Text your circle now so they know.
+        </p>
+      </div>
+      <Button asChild variant="sos" size="touch" className="w-full">
+        <a href={smsLink(phones, offlineSosMessage(fix))}>
+          <MessageSquare aria-hidden />
+          {phones.length > 0 ? `Text my circle (${phones.length})` : 'Text someone my location'}
+        </a>
+      </Button>
+      <Button asChild variant="outline" size="touch" className="w-full">
+        <a href="tel:112">
+          <PhoneCall aria-hidden />
+          Call 112
+        </a>
+      </Button>
+    </div>
+  )
+}
+
 /** Header shortcut: opens the active SOS if there is one, otherwise the SOS button. */
-export function SosQuickButton() {
+export function SosQuickButton({ userId }: { userId?: string }) {
+  const queryClient = useQueryClient()
+  // An SOS started elsewhere (a wearable) shows up at once.
+  const live = useLiveChannel(userId ? `user:${userId}` : null, () => {
+    void queryClient.invalidateQueries({ queryKey: sosKeys.active })
+  })
   const active = useQuery({
     queryKey: sosKeys.active,
     queryFn: fetchActiveIncident,
-    refetchInterval: 30_000,
+    refetchInterval: live ? 60_000 : 30_000,
   })
   const incident = active.data
 

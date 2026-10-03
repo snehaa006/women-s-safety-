@@ -56,3 +56,14 @@ jobs:
       - run: npm test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+  functions:
+    name: Edge Functions (messages, channels, Telegram bot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # The function logic is plain TypeScript; Node strips the types, no Deno needed.
+      - run: node --test supabase/functions/tests/*.test.ts

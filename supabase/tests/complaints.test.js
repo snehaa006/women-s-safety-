@@ -243,7 +243,7 @@ describe('AI triage queue', () => {
       signals: ['group'],
       rationale: 'A group harassed the reporter; mentions they may return.',
       legal_tags: ['BNS:79'],
-      provider: 'claude',
+      provider: 'gemini',
       model: 'test-model',
     }
     const outcome = await asServiceRole(

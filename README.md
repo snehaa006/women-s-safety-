@@ -21,7 +21,7 @@ A web platform (React PWA on a Supabase backend) that **gets help to a woman in 
 | Frontend | React + TypeScript (Vite), shadcn/ui + Tailwind, React Router (dynamic routes), TanStack Query, MapLibre, PWA |
 | Backend | Supabase-native: business rules, RLS and the ledger in Postgres (RPC functions), Edge Functions (TypeScript) for secrets and outside APIs, Realtime, Cron |
 | Data | Supabase: Postgres + PostGIS, Storage, Auth |
-| AI | Rules engine + speech-to-text + triage model (Claude API or a Hugging Face ZeroGPU Space) |
+| AI | Rules engine + speech-to-text + triage model (Gemini API or a Hugging Face ZeroGPU Space) |
 | Hosting | Vercel (frontend), Supabase (database, API, functions, files, sign-in) |
 
 ## Repository layout
@@ -111,8 +111,9 @@ contact's page shows a **Telegram invite** to send them. A contact opens it once
 ## AI triage (optional)
 
 Every complaint is scored instantly by the rules engine in Postgres. The `triage` Edge Function
-adds an AI review with Claude when you add `ANTHROPIC_API_KEY` as an **Edge Function secret**
-(optionally `TRIAGE_MODEL`, default `claude-opus-5-5`). The model can only raise severity, never
+adds an AI review with Google Gemini when you add `GEMINI_API_KEY` (from
+[Google AI Studio](https://aistudio.google.com/apikey)) as an **Edge Function secret**
+(optionally `TRIAGE_MODEL`, default `gemini-flash-latest`). The model can only raise severity, never
 lower it below the rules. Without the key, reports show "Scored by the rules" and nothing else
 changes.
 

@@ -5,11 +5,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
-  buildParams,
+  buildRequest,
   classify,
   drain,
+  geminiClient,
   type ClaimedComplaint,
-  type CreateMessage,
+  type GenerateContent,
   type ModelResponse,
   type TriageOutcome,
 } from '../_shared/triage.ts'
@@ -27,18 +28,23 @@ const complaint: ClaimedComplaint = {
   },
 }
 
-function answer(body: unknown, over: Partial<ModelResponse> = {}): ModelResponse {
+function answer(body: unknown, finishReason = 'STOP'): ModelResponse {
   return {
-    model: 'claude-opus-5-5',
-    stop_reason: 'end_turn',
-    content: [{ type: 'text', text: typeof body === 'string' ? body : JSON.stringify(body) }],
-    ...over,
+    modelVersion: 'gemini-2.5-flash',
+    candidates: [
+      {
+        finishReason,
+        content: {
+          parts: [{ text: typeof body === 'string' ? body : JSON.stringify(body) }],
+        },
+      },
+    ],
   }
 }
 
-function fakeModel(response: ModelResponse | Error, calls: Record<string, unknown>[] = []) {
-  const fn: CreateMessage = async (params) => {
-    calls.push(params)
+function fakeModel(response: ModelResponse | Error, calls: [string, Record<string, unknown>][] = []) {
+  const fn: GenerateContent = async (model, body) => {
+    calls.push([model, body])
     if (response instanceof Error) throw response
     return response
   }
@@ -46,12 +52,10 @@ function fakeModel(response: ModelResponse | Error, calls: Record<string, unknow
 }
 
 describe('request', () => {
-  it('asks for schema-checked JSON at low effort, with the report fenced as data', () => {
-    const params = buildParams(complaint, 'claude-opus-5-5') as Record<string, any>
-    assert.equal(params.model, 'claude-opus-5-5')
-    assert.equal(params.output_config.effort, 'low')
-    assert.equal(params.output_config.format.type, 'json_schema')
-    assert.deepEqual(params.output_config.format.schema.required, [
+  it('asks for schema-checked JSON, with the report fenced as data', () => {
+    const body = buildRequest(complaint) as Record<string, any>
+    assert.equal(body.generationConfig.responseMimeType, 'application/json')
+    assert.deepEqual(body.generationConfig.responseSchema.required, [
       'category',
       'severity',
       'confidence',
@@ -59,13 +63,32 @@ describe('request', () => {
       'rationale',
       'legal_tags',
     ])
-    assert.equal(params.tool_choice, undefined) // forced tool use isn't available on this model
-    assert.equal(params.thinking, undefined) // thinking stays at the model's default
-    assert.equal(params.fallbacks, 'default')
-    assert.match(params.system, /never instructions to you/)
-    const prompt = params.messages[0].content as string
+    assert.match(body.systemInstruction.parts[0].text, /never instructions to you/)
+    const prompt = body.contents[0].parts[0].text as string
     assert.match(prompt, /<report>\nek aadmi metro se mera peecha kar raha hai\n<\/report>/)
     assert.match(prompt, /Rules engine: stalking, L4/)
+    assert.equal(body.safetySettings.length, 4)
+  })
+
+  it('sends the key in a header and turns HTTP errors into statuses', async () => {
+    const seen: { url: string; init: RequestInit }[] = []
+    const ok = geminiClient('k-123', (async (url: string, init: RequestInit) => {
+      seen.push({ url, init })
+      return new Response(JSON.stringify(answer({ severity: 2 })), { status: 200 })
+    }) as typeof fetch)
+    await ok('gemini-flash-latest', { a: 1 })
+    assert.equal(
+      seen[0].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+    )
+    assert.equal((seen[0].init.headers as Record<string, string>)['x-goog-api-key'], 'k-123')
+    assert.doesNotMatch(seen[0].url, /k-123/)
+
+    const limited = geminiClient('k', (async () =>
+      new Response(JSON.stringify({ error: { message: 'Quota exceeded' } }), {
+        status: 429,
+      })) as typeof fetch)
+    await assert.rejects(limited('m', {}), { status: 429, message: 'Quota exceeded' })
   })
 })
 
@@ -78,7 +101,7 @@ describe('classify', () => {
   })
 
   it('returns the checked result', async () => {
-    const { fn } = fakeModel(
+    const { fn, calls } = fakeModel(
       answer({
         category: 'stalking',
         severity: 4,
@@ -88,12 +111,13 @@ describe('classify', () => {
         legal_tags: ['BNS:78'],
       }),
     )
-    const outcome = await classify(complaint, fn)
+    const outcome = await classify(complaint, fn, 'gemini-flash-latest')
+    assert.equal(calls[0][0], 'gemini-flash-latest')
     assert.equal(outcome.outcome, 'done')
     if (outcome.outcome !== 'done') return
     assert.equal(outcome.result.severity, 4)
-    assert.equal(outcome.result.provider, 'claude')
-    assert.equal(outcome.result.model, 'claude-opus-5-5')
+    assert.equal(outcome.result.provider, 'gemini')
+    assert.equal(outcome.result.model, 'gemini-2.5-flash')
     assert.deepEqual(outcome.result.legal_tags, ['BNS:78'])
   })
 
@@ -110,23 +134,24 @@ describe('classify', () => {
   })
 
   it("keeps the rules' answer when the model declines, without retrying", async () => {
-    const { fn } = fakeModel(
-      answer('', { stop_reason: 'refusal', stop_details: { category: 'general_harms' } }),
-    )
-    assert.deepEqual(await classify(complaint, fn), {
+    assert.deepEqual(await classify(complaint, fakeModel(answer('', 'SAFETY')).fn), {
       outcome: 'failed',
-      error: 'The model declined (general_harms)',
+      error: 'The model declined (SAFETY)',
       retry: false,
     })
+    const blocked = await classify(complaint, fakeModel({ promptFeedback: { blockReason: 'OTHER' } }).fn)
+    assert.deepEqual(blocked, { outcome: 'failed', error: 'The model declined (OTHER)', retry: false })
   })
 
-  it('retries bad JSON, missing severity and server errors, but not bad requests', async () => {
+  it('retries bad JSON, cut-off answers and server errors, but not bad requests', async () => {
     const bad = await classify(complaint, fakeModel(answer('not json')).fn)
     assert.deepEqual(bad, { outcome: 'failed', error: 'The model did not return JSON', retry: true })
     const noSeverity = await classify(complaint, fakeModel(answer({ category: 'other' })).fn)
     assert.equal(noSeverity.outcome === 'failed' && noSeverity.retry, true)
+    const cut = await classify(complaint, fakeModel(answer('{"seve', 'MAX_TOKENS')).fn)
+    assert.deepEqual(cut, { outcome: 'failed', error: 'The model answer was cut off', retry: true })
 
-    const overloaded = Object.assign(new Error('Overloaded'), { status: 529 })
+    const overloaded = Object.assign(new Error('Overloaded'), { status: 503 })
     const r1 = (await classify(complaint, fakeModel(overloaded).fn)) as TriageOutcome
     assert.equal(r1.outcome === 'failed' && r1.retry, true)
     const badRequest = Object.assign(new Error('invalid'), { status: 400 })

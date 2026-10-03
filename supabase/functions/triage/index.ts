@@ -6,35 +6,27 @@
 // each answer (public.finish_triage), which applies the max(rules, model) rule and writes the
 // ledger. That is why it runs without JWT verification.
 //
-// ANTHROPIC_API_KEY switches the Claude adapter on; TRIAGE_MODEL overrides the model. Without
-// the key every complaint keeps the rules' answer and is recorded as "skipped".
+// GEMINI_API_KEY switches the Gemini adapter on; TRIAGE_MODEL overrides the model. Without the
+// key every complaint keeps the rules' answer and is recorded as "skipped".
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-
-import Anthropic from 'npm:@anthropic-ai/sdk'
 
 import { env, json, serviceClient } from '../_shared/env.ts'
 import {
   classify,
   DEFAULT_MODEL,
   drain,
+  geminiClient,
   type ClaimedComplaint,
-  type CreateMessage,
 } from '../_shared/triage.ts'
 
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return json({ error: 'Use POST' }, 405)
 
   const db = serviceClient()
-  const apiKey = env('ANTHROPIC_API_KEY')
+  const apiKey = env('GEMINI_API_KEY')
   const model = env('TRIAGE_MODEL') ?? DEFAULT_MODEL
-  const anthropic = apiKey ? new Anthropic({ apiKey, maxRetries: 1, timeout: 45_000 }) : null
-  const createMessage: CreateMessage | null = anthropic
-    ? (params) =>
-        anthropic.beta.messages.create(
-          params as unknown as Parameters<typeof anthropic.beta.messages.create>[0],
-        ) as unknown as ReturnType<CreateMessage>
-    : null
+  const generate = apiKey ? geminiClient(apiKey) : null
 
   const totals = await drain(
     {
@@ -55,7 +47,7 @@ Deno.serve(async (request) => {
         if (error) console.error(`finish_triage ${complaintId}: ${error.message}`)
       },
     },
-    (complaint) => classify(complaint, createMessage, model),
+    (complaint) => classify(complaint, generate, model),
   )
 
   return json(totals)

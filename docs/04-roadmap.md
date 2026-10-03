@@ -136,6 +136,18 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** authorities see SOS events live and act on them. Unanswered alerts climb the ladder automatically.
 
+**Status (October 2026):** built and live on the Supabase project, with demo stations, patrol units and staff accounts (README → Demo console). Escalation shows on the console (flashing red, raised to the control room); push, email or SMS to supervisors waits for Web Push (PWA work) and the provider keys.
+
+**Built**
+
+- **Stations and routing** (`20261003144238`, `20261003144320`): PostGIS in the `extensions` schema; each organisation has a location and a jurisdiction polygon. The demo district is the New Delhi District Control Room over four police stations (Connaught Place, Tilak Marg, Chanakyapuri, Mandir Marg) and a campus security desk, with six patrol units. An SOS starts with the control room and is routed on its first location fix: the station whose jurisdiction covers the point, else the nearest within 50 km (ledger `incident.routed`).
+- **Who sees what:** `private.can_see_incident()`: admins and oversight see everything, members of the handling station see its incidents, members of the organisation above see them once raised to them (and their supervisors always). Realtime pings go to `org:<id>` for the station and every organisation above it, checked by RLS.
+- **Escalation engine:** policies are data (`escalation_policies`, a default plus per-station overrides, edited at `/console/admin/escalation`). The default ladder: 2 min unacknowledged → the station is re-alerted and the row flashes red; 5 min → raised to the district control room; then every 2 min, each repeat also flagging oversight. Each level is an `incident.escalate` job run by `private.tick()`; any acknowledgement stops it. Every step is an `incident.escalated` ledger entry and an `incident_escalations` row.
+- **Console** (`20261003144444`): `/console` live board (most urgent first, flashing red when escalated and unacknowledged, map, live via Realtime), `/console/incidents/:id` (acknowledge, dispatch a unit with an ETA, mark on scene, close with a code and note, live map, golden-hour metrics: time to acknowledge, dispatch and arrival, sealed timeline), `/console/map`, the on-duty toggle in the header, and escalation policies for admins.
+- **What the citizen and contacts see:** the SOS screen and the live link show the station, "Officer on the way: CP-PCR-1 from Connaught Place Police Station, arriving in about 6 minutes", arrival, and a call button for the station's duty desk.
+- **Mock incidents** (`20261003144500`): "Load demo incidents" (admins and supervisors) closes earlier demo incidents and starts three fresh ones from mock citizens at 40 s, 3.5 min and 6 min old, so the board shows every escalation state at once.
+- **Tests:** 84 database tests (14 new: routing, visibility, Realtime topics, the ladder on a fake clock, acknowledgement stopping it, the full response flow, unit and policy permissions, demo data), 69 frontend tests, and a live smoke test on the hosted project inside a rolled-back transaction.
+
 **Scope**
 
 - Routing by jurisdiction (PostGIS) and a duty roster (on-duty toggle).
@@ -146,12 +158,12 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Screens:** `/console`, `/console/incidents/:incidentId`, `/console/map`, `/console/admin/:section`
 
-**Done when**
+**Done when** *(checked items are covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] An SOS appears on the correct station's board within 5 s.
-- [ ] With no acknowledgement for 2 min the supervisor is alerted. After 5 min the district control room is alerted. Any acknowledgement stops the ladder.
-- [ ] The citizen sees "Officer assigned, ETA 6 min".
-- [ ] Escalation timing is covered by fake-clock tests.
+- [x] An SOS appears on the correct station's board within 5 s. *(Routed in the location transaction; the station's `org:` topic is pinged at once.)*
+- [x] With no acknowledgement for 2 min the station is re-alerted and the incident flashes red for its officers and supervisors. After 5 min the district control room is alerted. Any acknowledgement stops the ladder. *(Push to supervisors' phones comes with Web Push.)*
+- [x] The citizen sees "Officer on the way: CP-PCR-1 …, arriving in about 6 minutes".
+- [x] Escalation timing is covered by fake-clock tests.
 
 ---
 

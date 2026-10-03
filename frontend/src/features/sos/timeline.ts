@@ -14,6 +14,14 @@ const SOURCE: Record<string, string> = {
   simulator: 'the virtual wearable',
 }
 
+export const CLOSE_CODE: Record<string, string> = {
+  user_safe: 'person confirmed safe',
+  assisted_on_scene: 'assisted on scene',
+  transferred_to_case: 'moved to a case',
+  false_alarm: 'false alarm',
+  duplicate: 'duplicate',
+}
+
 /** Plain-language label for a ledger entry on the citizen's own timeline. */
 export function describeEntry(entry: TimelineEntry): string {
   const p = entry.payload
@@ -43,6 +51,22 @@ export function describeEntry(entry: TimelineEntry): string {
       return `${String(p.name)} said they're responding`
     case 'sos.pin_failed':
       return 'Wrong PIN entered'
+    case 'incident.routed':
+      return `Sent to ${String(p.name ?? 'the police')}`
+    case 'incident.escalated':
+      return p.oversight
+        ? 'Still not acknowledged: oversight notified'
+        : p.to === 'parent'
+          ? `Not acknowledged in time: raised to ${String(p.org_name ?? 'the control room')}`
+          : `Not acknowledged yet: ${String(p.org_name ?? 'the station')} alerted again`
+    case 'incident.acknowledged':
+      return 'Police acknowledged the SOS'
+    case 'incident.dispatched':
+      return `${String(p.unit)} sent, ETA ${String(p.eta_min)} min`
+    case 'incident.on_scene':
+      return `${String(p.unit ?? 'Police')} arrived`
+    case 'incident.closed':
+      return `Closed by police: ${CLOSE_CODE[String(p.code)] ?? String(p.code)}`
     case 'sos.resolved':
       return p.resolution === 'false_alarm' ? 'Ended as a false alarm' : 'Marked safe'
     default:

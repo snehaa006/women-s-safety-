@@ -8,13 +8,45 @@ export const circleKeys = { all: ['trusted-contacts'] as const }
 
 export const MAX_CONTACTS = 10
 
+const PHONES_KEY = 'circle-phones'
+
 export async function listContacts(): Promise<Contact[]> {
   const result = await db()
     .from('trusted_contacts')
     .select('*')
     .order('priority')
     .order('created_at')
-  return unwrap(result)
+  const contacts = unwrap(result)
+  rememberPhones(contacts)
+  return contacts
+}
+
+/** Kept on the device so the offline SOS can still text the circle without internet. */
+function rememberPhones(contacts: Contact[]) {
+  try {
+    const phones = contacts.flatMap((c) => (c.phone ? [c.phone] : []))
+    localStorage.setItem(PHONES_KEY, JSON.stringify(phones))
+  } catch {
+    // Storage blocked: the offline SMS just opens without numbers.
+  }
+}
+
+export function rememberedPhones(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PHONES_KEY) ?? '[]')
+    return Array.isArray(value) ? value.filter((p): p is string => typeof p === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** The invite a contact opens once so the bot can send them SOS alerts. */
+export function telegramInviteLink(bot: string, code: string) {
+  return `https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(code)}`
+}
+
+export async function disconnectTelegram(contactId: string) {
+  unwrap(await db().rpc('disconnect_telegram', { p_contact_id: contactId }))
 }
 
 export async function addContact(input: ContactInput, priority: number) {
@@ -44,3 +76,6 @@ export async function reorderContacts(ordered: Contact[]) {
     unwrap(await db().from('trusted_contacts').update({ priority }).eq('id', contact.id))
   }
 }
+
+/** The bot's username (public), e.g. WomensSafetyAlertsBot. Unset until Telegram is set up. */
+export const telegramBot = (import.meta.env.VITE_TELEGRAM_BOT as string | undefined)?.trim() || null

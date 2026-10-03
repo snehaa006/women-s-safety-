@@ -18,3 +18,9 @@ export function smsLink(phones: string[], text: string) {
   const to = phones.map((phone) => phone.replace(/[^\d+]/g, '')).join(',')
   return `sms:${to}?&body=${encodeURIComponent(text)}`
 }
+
+/** The SMS sent by hand when there is no internet. GPS works offline, so it carries coordinates. */
+export function offlineSosMessage(fix: { lat: number; lng: number } | null) {
+  const where = fix ? ` My location: https://maps.google.com/?q=${fix.lat},${fix.lng}` : ''
+  return `SOS: I need help.${where} (Sent by SMS: my phone has no internet.)`
+}

@@ -20,6 +20,9 @@ import { Label } from '@/components/ui/label'
 import { LazyMap } from '@/features/map/lazy-map'
 import { mapsLink } from '@/features/map/links'
 import { respondToLiveLink, sosKeys, viewLiveLink, type LiveView } from '@/features/sos/api'
+import { SafePointsCard } from '@/features/sos/safe-points'
+import { useSafePoints } from '@/features/sos/use-safe-points'
+import { fallbackInterval, useLiveChannel } from '@/lib/realtime'
 import { formatDateTime, formatTime, timeAgo } from '@/lib/time'
 import { useNow } from '@/lib/use-now'
 
@@ -28,10 +31,23 @@ const RESPONDED_KEY = 'responded-as'
 /** The page a trusted contact opens from the SOS message. No account needed. */
 export function Component() {
   const { token = '' } = useParams()
+  const queryClient = useQueryClient()
+  const [topic, setTopic] = useState<string | null>(null)
+  // A public topic whose name only link holders learn; its pings carry no data.
+  const connected = useLiveChannel(
+    topic,
+    () => void queryClient.invalidateQueries({ queryKey: sosKeys.live(token) }),
+    { isPrivate: false },
+  )
   const live = useQuery({
     queryKey: sosKeys.live(token),
-    queryFn: () => viewLiveLink(token),
-    refetchInterval: (query) => (query.state.data?.status === 'active' ? 5000 : false),
+    queryFn: async () => {
+      const view = await viewLiveLink(token)
+      setTopic(view?.status === 'active' ? view.channel : null)
+      return view
+    },
+    refetchInterval: (query) =>
+      query.state.data?.status === 'active' ? fallbackInterval(connected) : false,
   })
 
   if (live.isPending) {
@@ -70,6 +86,7 @@ function LivePage({ token, view }: { token: string; view: LiveView }) {
   const name = view.citizen_name ?? 'Your contact'
   const active = view.status === 'active'
   const location = view.last_location
+  const safePoints = useSafePoints(active ? location : null)
 
   return (
     <div className="grid gap-5">
@@ -129,7 +146,7 @@ function LivePage({ token, view }: { token: string; view: LiveView }) {
         </div>
       ) : null}
 
-      {active ? <Respond token={token} name={name} /> : null}
+      {active ? <Respond token={token} name={name} contactName={view.contact_name} /> : null}
 
       <Card className="gap-4">
         <CardHeader>
@@ -143,6 +160,7 @@ function LivePage({ token, view }: { token: string; view: LiveView }) {
             className="h-72"
             path={view.path}
             current={location}
+            points={active ? safePoints.data : undefined}
             follow={active}
             label={`${name}'s location and route since the SOS started`}
           />
@@ -174,6 +192,10 @@ function LivePage({ token, view }: { token: string; view: LiveView }) {
           )}
         </CardContent>
       </Card>
+
+      {active && location ? (
+        <SafePointsCard points={safePoints.data} pending={safePoints.isPending} />
+      ) : null}
 
       {view.responders.length > 0 ? (
         <Card className="gap-3">
@@ -207,10 +229,19 @@ function readResponded(token: string) {
   }
 }
 
-function Respond({ token, name }: { token: string; name: string }) {
+function Respond({
+  token,
+  name,
+  contactName,
+}: {
+  token: string
+  name: string
+  contactName: string | null
+}) {
   const queryClient = useQueryClient()
   const [respondedAs, setRespondedAs] = useState(() => readResponded(token))
-  const [responder, setResponder] = useState('')
+  // A link sent to one contact already knows their name.
+  const [responder, setResponder] = useState(contactName ?? '')
   const respond = useMutation({
     mutationFn: (who: string) => respondToLiveLink(token, who),
     onSuccess: async (_, who) => {

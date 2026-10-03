@@ -1,6 +1,9 @@
 -- Demo data for local development (`supabase db reset`). Not applied to hosted projects by default.
 -- Fixed ids keep links stable. To make staff: sign up, then run select public.admin_set_role(...).
 
+-- Inside a local stack the database reaches Edge Functions through the API gateway.
+update private.settings set value = 'http://kong:8000/functions/v1' where key = 'functions_url';
+
 insert into public.organizations (id, name, type, parent_id, phone) values
   ('00000000-0000-4000-8000-000000000001', 'Demo District Control Room', 'control_room', null, '112'),
   ('00000000-0000-4000-8000-000000000011', 'Sector 21 Police Station', 'police_station',

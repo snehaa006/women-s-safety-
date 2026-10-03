@@ -54,3 +54,57 @@ grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+
+-- pg_net: requests are recorded instead of sent, so tests can see that the notify function was
+-- asked to run. Same signature as the real net.http_post.
+create schema net;
+create table net.requests (
+  id      bigint generated always as identity primary key,
+  url     text not null,
+  body    jsonb,
+  headers jsonb,
+  at      timestamptz not null default now()
+);
+create function net.http_post(
+  url                  text,
+  body                 jsonb default '{}'::jsonb,
+  params               jsonb default '{}'::jsonb,
+  headers              jsonb default '{"Content-Type": "application/json"}'::jsonb,
+  timeout_milliseconds integer default 5000
+)
+returns bigint
+language sql
+as $$
+  insert into net.requests (url, body, headers) values (url, body, headers) returning id
+$$;
+
+-- Realtime: broadcast from the database writes to realtime.messages; private topics are
+-- authorized by RLS policies on that table, with the topic in the realtime.topic setting.
+create schema realtime;
+create table realtime.messages (
+  id          uuid primary key default gen_random_uuid(),
+  topic       text not null,
+  extension   text not null,
+  payload     jsonb,
+  event       text,
+  private     boolean default false,
+  inserted_at timestamp not null default now()
+);
+alter table realtime.messages enable row level security;
+create function realtime.topic()
+returns text
+language sql
+stable
+as $$
+  select nullif(current_setting('realtime.topic', true), '')::text
+$$;
+create function realtime.send(payload jsonb, event text, topic text, private boolean default true)
+returns void
+language sql
+as $$
+  insert into realtime.messages (topic, extension, payload, event, private)
+  values (topic, 'broadcast', payload, event, private)
+$$;
+grant usage on schema realtime to anon, authenticated, service_role;
+grant select on realtime.messages to authenticated;
+grant execute on function realtime.topic() to anon, authenticated, service_role;

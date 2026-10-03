@@ -5,6 +5,8 @@ export type MapViewProps = {
   current?: { lat: number; lng: number } | null
   /** A planned route drawn dashed under the path (the virtual wearable's demo walk). */
   routePreview?: [number, number][]
+  /** Places drawn as dots: police stations blue, hospitals green. */
+  points?: { lat: number; lng: number; name: string; category: string }[]
   /** Keep the map centred on the current position. */
   follow?: boolean
   className?: string

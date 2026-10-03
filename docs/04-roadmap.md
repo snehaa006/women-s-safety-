@@ -88,7 +88,7 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** the core safety promise. Press SOS, and the right people see you live within seconds.
 
-**Status (October 2026):** part A is built and live on the Supabase project; part B is next.
+**Status (October 2026):** parts A and B are built and live on the Supabase project. Email and Telegram delivery switch on when their keys are added as Edge Function secrets (README → Alerts); until then each alert is recorded as "not sent: not set up yet", and the one-tap sharing still works.
 
 **Built (part A)**
 
@@ -98,7 +98,15 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 - **Mock IoT:** the virtual wearable at `/app/devices/simulator` (hold 3 s for SOS, gestures, demo walk through Connaught Place, battery, heartbeat, tamper) and `tools/device-simulator.mjs`, both sending the exact requests the ESP32 will send. See [05 · Wearable protocol](05-device-protocol.md).
 - **Tests:** 49 database tests and 39 frontend tests, a browser run of the virtual wearable, and a live smoke test on the hosted project inside a rolled-back transaction.
 
-**Next (part B):** automatic alerts to the circle (a `jobs` row per contact, sent by the `notify` Edge Function by email, Web Push or Telegram; needs a provider key), the offline queue, Realtime instead of 5-second polling, and nearby safe points.
+**Built (part B)**
+
+- **Automatic alerts** (migrations `20261002202915` to `20261003134527`): the SOS transaction queues one `alerts` row per contact and channel (email, and Telegram once the contact has linked it) with a personal live link per contact, then asks `pg_net` to call the `notify` Edge Function, which claims due alerts, sends them through Resend or the Telegram Bot API and reports each result to the ledger. Failures retry after 30 s and 2 min; nothing waits silently longer than 15 minutes. Ending the SOS cancels unsent alerts and tells the contacts who got it that she is safe; the duress PIN changes nothing for them.
+- **Durable timers:** a `private.jobs` table and `private.tick()`, run by Supabase Cron every 5 seconds. The first job: if nobody is responding 2 minutes after an SOS, the circle gets a reminder and the ledger records `sos.no_response` (the contact half of the P2 escalation ladder). The tick takes the time as a parameter, so the database tests travel in time.
+- **Telegram:** each contact has a one-time invite (`t.me/<bot>?start=<code>`); the `telegram-webhook` function links the chat, `/stop` unlinks it, and the citizen can disconnect it.
+- **Realtime instead of polling:** database triggers ping `incident:<id>` and `user:<id>` (private, checked by RLS on `realtime.messages`) and a secret `live:<topic>` for the contact page. Pings carry no data; screens refetch through the normal reads and fall back to polling while the socket is down.
+- **Offline SOS:** without a connection the SOS is saved in IndexedDB with its client id and trigger time, a one-tap SMS with the GPS link opens for the circle, and the app sends it (2 s, 4 s, 8 s … 60 s, and at once when back online). The server keeps the original time and records the delay. Background Sync waits for the service worker (PWA work).
+- **Nearby safe points:** police stations and hospitals from OpenStreetMap (central New Delhi), the nearest two of each on the SOS screen, the map and the contact page.
+- **Tests:** 70 database tests, 52 frontend tests and 13 Edge Function tests; a live smoke test of the whole alert flow inside a rolled-back transaction.
 
 **Scope**
 
@@ -115,10 +123,10 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Done when** *(checked items are covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] Holding SOS sends contacts a push or email with the live link within 5 s. The map moves as the citizen walks. *(The map moves. Sending the link is one tap for now; automatic alerts are part B.)*
+- [ ] Holding SOS sends contacts a push or email with the live link within 5 s. The map moves as the citizen walks. *(Built and smoke-tested up to the provider call: the alert is queued and `notify` is called in the SOS transaction. Delivery needs the email or Telegram key.)*
 - [x] A contact taps "I'm responding" and the citizen sees it within 5 s.
 - [x] "I'm safe" needs the PIN. The duress PIN shows "cancelled" while the alert stays active.
-- [ ] In airplane mode the SOS is queued, the SMS fallback opens prefilled, and the SOS is delivered once back online. *(Part B.)*
+- [x] In airplane mode the SOS is queued, the SMS fallback opens prefilled, and the SOS is delivered once back online.
 - [x] The simulator's long press creates an SOS exactly like the app button.
 - [x] Every step appears on the incident timeline.
 

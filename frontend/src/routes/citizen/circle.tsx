@@ -18,6 +18,7 @@ import {
   type Contact,
 } from '@/features/circle/api'
 import { ContactForm } from '@/features/circle/contact-form'
+import { TelegramCard } from '@/features/circle/telegram-card'
 import { paths } from '@/lib/paths'
 
 export function Component() {
@@ -115,7 +116,10 @@ function CircleList({ contacts }: { contacts: Contact[] }) {
         <Card className="border-dashed shadow-none">
           <CardContent className="flex items-start gap-3">
             <Users className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden />
-            <p>Add at least two people you trust. They don't need an account.</p>
+            <p>
+              Add at least two people you trust. They don't need an account. An SOS reaches them
+              automatically by email or Telegram.
+            </p>
           </CardContent>
         </Card>
       ) : null}
@@ -146,7 +150,13 @@ function CircleList({ contacts }: { contacts: Contact[] }) {
                       ) : null}
                     </span>
                     <span className="text-muted-foreground truncate text-sm">
-                      {[contact.phone, contact.email].filter(Boolean).join(' · ')}
+                      {[
+                        contact.phone,
+                        contact.email,
+                        contact.telegram_linked_at ? 'Telegram' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </span>
                   </Link>
                   <div className="flex shrink-0 items-center">
@@ -217,6 +227,7 @@ function EditContact({ contact }: { contact: Contact }) {
           />
         </CardContent>
       </Card>
+      <TelegramCard contact={contact} />
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>

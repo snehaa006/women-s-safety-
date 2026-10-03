@@ -1,6 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 
-import type { Feature, LineString } from 'geojson'
+import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import {
   Map as MapLibre,
   Marker,
@@ -29,10 +29,22 @@ function line(coordinates: [number, number][]): Feature<LineString> {
   return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } }
 }
 
+function dots(points: NonNullable<MapViewProps['points']>): FeatureCollection<Point> {
+  return {
+    type: 'FeatureCollection',
+    features: points.map((p) => ({
+      type: 'Feature',
+      properties: { name: p.name, category: p.category },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    })),
+  }
+}
+
 export default function MapView({
   path,
   current,
   routePreview,
+  points,
   follow = true,
   className,
   label,
@@ -72,6 +84,26 @@ export default function MapView({
         source: 'route',
         paint: { 'line-color': '#6b7280', 'line-width': 3, 'line-dasharray': [2, 2] },
       })
+      instance.addSource('points', { type: 'geojson', data: dots([]) })
+      instance.addLayer({
+        id: 'points',
+        type: 'circle',
+        source: 'points',
+        paint: {
+          'circle-radius': 7,
+          'circle-color': [
+            'match',
+            ['get', 'category'],
+            'police',
+            '#2547b8',
+            'hospital',
+            '#0f8a5f',
+            '#6b7280',
+          ],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      })
       instance.addSource('path', { type: 'geojson', data: line([]) })
       instance.addLayer({
         id: 'path',
@@ -101,6 +133,7 @@ export default function MapView({
       if (!instance || !ready.current) return
       instance.getSource<GeoJSONSource>('path')?.setData(line(path))
       instance.getSource<GeoJSONSource>('route')?.setData(line(routePreview ?? []))
+      instance.getSource<GeoJSONSource>('points')?.setData(dots(points ?? []))
       if (lat === undefined || lng === undefined) return
       if (!marker.current) {
         const dot = document.createElement('div')
@@ -114,7 +147,7 @@ export default function MapView({
       }
     }
     apply.current()
-  }, [path, routePreview, lat, lng, follow])
+  }, [path, routePreview, points, lat, lng, follow])
 
   if (failed) {
     return (

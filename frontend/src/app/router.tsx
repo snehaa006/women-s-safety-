@@ -65,28 +65,8 @@ export const routes: RouteObject[] = [
               />
             ),
           },
-          {
-            path: 'report',
-            element: (
-              <PlaceholderPage
-                title="Report an incident"
-                phase="P3"
-                module="M6"
-                description="Speak or type what happened. Your location is filled in."
-              />
-            ),
-          },
-          {
-            path: 'reports/:complaintId?',
-            element: (
-              <PlaceholderPage
-                title="My reports"
-                phase="P3"
-                module="M6"
-                description="Status, timeline and in-app calls for each report."
-              />
-            ),
-          },
+          { path: 'report', lazy: () => import('@/routes/citizen/report') },
+          { path: 'reports/:complaintId?', lazy: () => import('@/routes/citizen/reports') },
           {
             path: 'vault/:itemId?',
             element: (
@@ -114,17 +94,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, lazy: () => import('@/routes/console/live') },
           { path: 'incidents/:incidentId', lazy: () => import('@/routes/console/incident') },
-          {
-            path: 'complaints/:complaintId?',
-            element: (
-              <PlaceholderPage
-                title="Complaints"
-                phase="P3"
-                module="M6"
-                description="Triage queue sorted by time left, and the complaint workbench."
-              />
-            ),
-          },
+          { path: 'complaints/:complaintId?', lazy: () => import('@/routes/console/complaints') },
           {
             path: 'cases/:caseId?',
             element: (
@@ -148,17 +118,7 @@ export const routes: RouteObject[] = [
             ),
           },
           { path: 'map', lazy: () => import('@/routes/console/map') },
-          {
-            path: 'reviews',
-            element: (
-              <PlaceholderPage
-                title="Reviews"
-                phase="P3"
-                module="M7"
-                description="Severity overrides waiting for supervisor review."
-              />
-            ),
-          },
+          { path: 'reviews', lazy: () => import('@/routes/console/reviews') },
           {
             path: 'admin/:section',
             element: (

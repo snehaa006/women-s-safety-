@@ -10,9 +10,9 @@ import {
 import { NavLink, Outlet, useNavigate } from 'react-router'
 
 import { Brand } from '@/components/brand'
-import { PhaseBadge } from '@/components/phase-badge'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/auth-context'
+import { DutyToggle } from '@/features/console/duty-toggle'
 import { ThemeToggle } from '@/features/theme/theme-toggle'
 import { paths } from '@/lib/paths'
 import { cn } from '@/lib/utils'
@@ -101,9 +101,7 @@ export function ConsoleLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-end gap-2 border-b px-4">
-          <span className="text-muted-foreground flex items-center gap-2 text-sm">
-            On-duty status <PhaseBadge phase="P2" />
-          </span>
+          <DutyToggle />
           <ThemeToggle />
           <Button
             variant="ghost"

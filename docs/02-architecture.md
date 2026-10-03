@@ -365,6 +365,8 @@ I3 fixes L5 at 3 min and L2 at 30 min. The other values are proposed defaults.
 4. The `notify` Edge Function, called through `pg_net`, delivers the queued notifications and writes the results back to `alerts`.
 5. The tick is idempotent and takes the current time as a parameter, so tests can time-travel.
 
+**As built (P2).** The job kind is `incident.escalate` in `private.jobs`, run by `private.tick()` (one tick for every timer). Policies store `levels` as `[{after_s, to: station | parent}]` plus `repeat_s`; the first level is retimed to the handling station's policy once the SOS is routed. L0 to contacts is the P1 alert flow and its 2-minute contact reminder. Console channels (board ping, flashing red, the control room's board) are live; push, SMS and email to staff wait for Web Push and provider keys.
+
 **Golden-hour metrics** per incident: time to first acknowledgement, time to dispatch, time to arrival. They are shown on the console and in weekly oversight reports.
 
 ---
@@ -450,6 +452,8 @@ flowchart LR
   | **L1 Low** | General concern | Poor street lighting, nuisance |
 
 - **Legal tags:** a `legal_tag_map` table maps categories to candidate penal-code sections (for example under the Bharatiya Nyaya Sanhita). A legal reviewer maintains it, and officers see the tags only as **suggestions**.
+
+**As built (P3).** Rules: `private.triage_rules()` over `private.triage_lexicon` (regular expressions in English, Hindi and Hinglish) and `private.triage_categories` (base / just now / happening now severities). AI: the `triage` Edge Function claims work with `claim_triage()` and reports with `finish_triage()` (service role only); the adapter uses structured outputs (JSON schema) because forced tool use is not available on `claude-opus-5-5`, and keeps the rules' answer on a refusal. Speech-to-text is the browser's live dictation for now (§9.2).
 
 ### 9.2 Speech-to-text
 

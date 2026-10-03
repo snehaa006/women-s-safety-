@@ -136,6 +136,18 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** authorities see SOS events live and act on them. Unanswered alerts climb the ladder automatically.
 
+**Status (October 2026):** built and live on the Supabase project, with demo stations, patrol units and staff accounts (README → Demo console). Escalation shows on the console (flashing red, raised to the control room); push, email or SMS to supervisors waits for Web Push (PWA work) and the provider keys.
+
+**Built**
+
+- **Stations and routing** (`20261003144238`, `20261003144320`): PostGIS in the `extensions` schema; each organisation has a location and a jurisdiction polygon. The demo district is the New Delhi District Control Room over four police stations (Connaught Place, Tilak Marg, Chanakyapuri, Mandir Marg) and a campus security desk, with six patrol units. An SOS starts with the control room and is routed on its first location fix: the station whose jurisdiction covers the point, else the nearest within 50 km (ledger `incident.routed`).
+- **Who sees what:** `private.can_see_incident()`: admins and oversight see everything, members of the handling station see its incidents, members of the organisation above see them once raised to them (and their supervisors always). Realtime pings go to `org:<id>` for the station and every organisation above it, checked by RLS.
+- **Escalation engine:** policies are data (`escalation_policies`, a default plus per-station overrides, edited at `/console/admin/escalation`). The default ladder: 2 min unacknowledged → the station is re-alerted and the row flashes red; 5 min → raised to the district control room; then every 2 min, each repeat also flagging oversight. Each level is an `incident.escalate` job run by `private.tick()`; any acknowledgement stops it. Every step is an `incident.escalated` ledger entry and an `incident_escalations` row.
+- **Console** (`20261003144444`): `/console` live board (most urgent first, flashing red when escalated and unacknowledged, map, live via Realtime), `/console/incidents/:id` (acknowledge, dispatch a unit with an ETA, mark on scene, close with a code and note, live map, golden-hour metrics: time to acknowledge, dispatch and arrival, sealed timeline), `/console/map`, the on-duty toggle in the header, and escalation policies for admins.
+- **What the citizen and contacts see:** the SOS screen and the live link show the station, "Officer on the way: CP-PCR-1 from Connaught Place Police Station, arriving in about 6 minutes", arrival, and a call button for the station's duty desk.
+- **Mock incidents** (`20261003144500`): "Load demo incidents" (admins and supervisors) closes earlier demo incidents and starts three fresh ones from mock citizens at 40 s, 3.5 min and 6 min old, so the board shows every escalation state at once.
+- **Tests:** 84 database tests (14 new: routing, visibility, Realtime topics, the ladder on a fake clock, acknowledgement stopping it, the full response flow, unit and policy permissions, demo data), 69 frontend tests, and a live smoke test on the hosted project inside a rolled-back transaction.
+
 **Scope**
 
 - Routing by jurisdiction (PostGIS) and a duty roster (on-duty toggle).
@@ -146,18 +158,31 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Screens:** `/console`, `/console/incidents/:incidentId`, `/console/map`, `/console/admin/:section`
 
-**Done when**
+**Done when** *(checked items are covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] An SOS appears on the correct station's board within 5 s.
-- [ ] With no acknowledgement for 2 min the supervisor is alerted. After 5 min the district control room is alerted. Any acknowledgement stops the ladder.
-- [ ] The citizen sees "Officer assigned, ETA 6 min".
-- [ ] Escalation timing is covered by fake-clock tests.
+- [x] An SOS appears on the correct station's board within 5 s. *(Routed in the location transaction; the station's `org:` topic is pinged at once.)*
+- [x] With no acknowledgement for 2 min the station is re-alerted and the incident flashes red for its officers and supervisors. After 5 min the district control room is alerted. Any acknowledgement stops the ladder. *(Push to supervisors' phones comes with Web Push.)*
+- [x] The citizen sees "Officer on the way: CP-PCR-1 …, arriving in about 6 minutes".
+- [x] Escalation timing is covered by fake-clock tests.
 
 ---
 
 ### P3 · Smart Complaints, AI Triage, Accountability Lock
 
 **Goal:** frictionless reporting that is scored, routed and cannot be quietly downgraded.
+
+**Status (October 2026):** built and live on the Supabase project. The rules triage runs on every report; the Claude adapter is deployed as the `triage` Edge Function and switches on when `ANTHROPIC_API_KEY` is added as a function secret (README → AI triage). Until then each report records "AI review skipped" and the rules' answer stands.
+
+**Built**
+
+- **Rules engine** (`20261003183841`): a lexicon of English, Hindi (Devanagari) and Hinglish patterns in `private.triage_lexicon` plus per-category severities for past / just now / happening now. `private.triage_rules()` returns category, severity floor, signals, language and a rationale in a few milliseconds. *"ek aadmi metro se mera peecha kar raha hai"* → stalking, L4, "happening now, on public transport". The report screen shows this answer live as the citizen types (`triage_preview`).
+- **Filing** (`create_complaint`): idempotent by client id, routed with the P2 jurisdiction lookup (else the control room), SLA deadline from `complaint_sla` (L5 3 min, L4 10, L3 20, L2 30, L1 4 h), ledger `complaint.filed` with a SHA-256 of the text.
+- **SLA ladder:** a `complaint.escalate` job at the deadline; missed → the station's queue flashes red (level 1), then raised to the organisation above (level 2), then repeats that flag oversight. Acknowledging stops it. A severity change moves the deadline.
+- **AI triage** (`triage` Edge Function, `_shared/triage.ts`): claims waiting complaints (`claim_triage`, service role only), asks `claude-opus-5-5` at low effort for schema-checked JSON (structured outputs), handles refusals and retries, and reports with `finish_triage`, which enforces *final = max(rules floor, model)*, ignores unknown categories and tightens the SLA when severity rises. Checks at 45 s, +60 s, +60 s re-ask the function; after three silent tries it records "AI review failed".
+- **Accountability lock** (`set_complaint_severity`): raising is free; going below the AI baseline needs a justification of at least 20 characters, writes `severity_overrides` and the ledger, and lands in `/console/reviews` for supervisors of that station or above (never the officer who made it), grouped by week. Reversing needs a note and restores the baseline.
+- **Confidential mode:** officers see "Reporter 7F3K" and no name, phone or account id anywhere in the console RPCs; the citizen can share their identity later (`share_complaint_identity`, logged). *Note:* the link to the account stays in the database, protected by RLS and the RPCs, rather than encrypted with a separate key; key-based encryption is part of the P9 hardening.
+- **Screens:** `/app/report` (text or live dictation in English or Hindi via the browser's speech recognition, location, "when", confidential toggle), `/app/reports` and `/app/reports/:id` (status, police note, timeline, share identity), `/console/complaints` (queue with live countdowns), `/console/complaints/:id` (workbench: report, rules and AI panels, acknowledge, in progress, change severity, resolve/close with a note for the citizen, sealed timeline), `/console/reviews`. The live board shows the three most urgent complaints. "Load demo complaints" (admins, supervisors) files four mock reports, one already past its SLA.
+- **Tests:** 102 database tests (18 new), 20 Edge Function tests (7 new), 77 frontend tests, and a live smoke test inside a rolled-back transaction.
 
 **Scope**
 
@@ -169,12 +194,12 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Screens:** `/app/report`, `/app/reports`, `/app/reports/:complaintId`, `/console/complaints`, `/console/complaints/:complaintId`, `/console/reviews`
 
-**Done when**
+**Done when** *(checked items are covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] A Hinglish voice note such as *"ek aadmi metro se mera peecha kar raha hai"* becomes a transcript, category `stalking`, L4 and a rationale. The rules answer is instant and the AI update follows within about 30 s.
-- [ ] An L5 complaint shows a 3-minute countdown. A missed SLA escalates.
-- [ ] Downgrading below the AI severity is blocked until a justification is entered. The override then appears in the supervisor's review queue.
-- [ ] Confidential complaints never show the citizen's name or phone number to officers.
+- [ ] A Hinglish voice note such as *"ek aadmi metro se mera peecha kar raha hai"* becomes a transcript, category `stalking`, L4 and a rationale. The rules answer is instant and the AI update follows within about 30 s. *(Transcript and the instant rules answer are done; the AI update needs `ANTHROPIC_API_KEY`. Voice uses the browser's live dictation, not a server-side speech model.)*
+- [x] An L5 complaint shows a 3-minute countdown. A missed SLA escalates.
+- [x] Downgrading below the AI severity is blocked until a justification is entered. The override then appears in the supervisor's review queue.
+- [x] Confidential complaints never show the citizen's name or phone number to officers.
 
 ---
 
@@ -303,7 +328,7 @@ D1 to D4 are decided. The rest have recommended defaults; confirm or change them
 | D2 | Database & files | **Decided: Supabase** Postgres + PostGIS + Storage (project `women's safety`) | Cloudflare R2 for evidence if storage outgrows 1 GB |
 | D3 | Auth | **Decided: Supabase Auth**, roles in `profiles`, checked by RLS | n/a |
 | D4 | Frontend hosting | **Decided: Vercel** (global CDN, preview URL per PR) | Cloudflare Pages, Render Static Site |
-| D5 | Triage AI | **Rules engine first.** Then the Claude API (`claude-opus-5-5`, low effort, structured output) if there is an API budget, otherwise an HF ZeroGPU Space (free, quota-limited). | |
+| D5 | Triage AI | **Decided: rules engine first** (built in P3). The Claude API adapter (`claude-opus-5-5`, low effort, structured output) is deployed and switches on with `ANTHROPIC_API_KEY`. | HF ZeroGPU Space (free, quota-limited) |
 | D6 | "Blockchain" | **Hash-chained ledger + OpenTimestamps**, with an optional testnet contract for the demo | Running a blockchain node (not recommended) |
 | D7 | Demo notification channels | **Web Push + email + Telegram**, then Twilio SMS/WhatsApp sandbox | MSG91 (needs DLT), Meta WhatsApp Cloud API |
 | D8 | In-app calls | **WebRTC + a free TURN service** | LiveKit or Daily free tier |

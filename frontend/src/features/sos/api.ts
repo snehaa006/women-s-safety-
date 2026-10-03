@@ -49,6 +49,19 @@ export type TimelineEntry = {
   payload: Record<string, unknown>
 }
 
+/** The police side of an SOS, as the citizen and her contacts see it. */
+export type PoliceResponse = {
+  org_name: string | null
+  org_phone: string | null
+  state: 'unacknowledged' | 'acknowledged' | 'responding' | 'on_scene'
+  acknowledged_at: string | null
+  /** Call sign of the unit on the way: "CP-PCR-1". */
+  unit: string | null
+  eta_at: string | null
+  arrived_at: string | null
+  raised_to_control_room: boolean
+}
+
 /** What a trusted contact sees on /t/:token. */
 export type LiveView = {
   citizen_name: string | null
@@ -67,6 +80,7 @@ export type LiveView = {
   last_location: { lat: number; lng: number; accuracy_m: number | null; at: string } | null
   path: [number, number][]
   responders: { name: string; at: string }[]
+  police: PoliceResponse | null
 }
 
 export const sosKeys = {
@@ -79,6 +93,7 @@ export const sosKeys = {
     ['safe-points', lat.toFixed(3), lng.toFixed(3)] as const,
   path: (id: string) => ['incidents', id, 'path'] as const,
   timeline: (id: string) => ['incidents', id, 'timeline'] as const,
+  police: (id: string) => ['incidents', id, 'police'] as const,
   pins: ['sos-pins'] as const,
   live: (token: string) => ['live-link', token] as const,
 }
@@ -217,6 +232,11 @@ export async function fetchPath(incidentId: string): Promise<[number, number][]>
 export async function fetchTimeline(incidentId: string) {
   const result = await db().rpc('incident_timeline', { p_incident_id: incidentId })
   return unwrap(result) as TimelineEntry[]
+}
+
+export async function fetchPoliceResponse(incidentId: string) {
+  const result = await db().rpc('incident_response', { p_incident_id: incidentId })
+  return unwrap(result) as PoliceResponse | null
 }
 
 export async function fetchPinStatus() {

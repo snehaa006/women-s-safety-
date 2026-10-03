@@ -33,6 +33,16 @@ vi.mock('@/features/sos/api', async (importOriginal) => ({
   ]),
   fetchPath: vi.fn(async () => []),
   fetchResponders: vi.fn(async () => []),
+  fetchPoliceResponse: vi.fn(async () => ({
+    org_name: 'Connaught Place Police Station',
+    org_phone: '011 2334 0101',
+    state: 'unacknowledged',
+    acknowledged_at: null,
+    unit: null,
+    eta_at: null,
+    arrived_at: null,
+    raised_to_control_room: true,
+  })),
   fetchPinStatus: vi.fn(),
   resolveIncident: vi.fn(),
   viewLiveLink: vi.fn(),
@@ -63,6 +73,21 @@ const incident: Incident = {
   last_location_at: new Date().toISOString(),
   ledger_batch_at: new Date().toISOString(),
   live_topic: 'topic-1',
+  assigned_org_id: 'org-cp',
+  routed_at: new Date().toISOString(),
+  response_state: 'unacknowledged',
+  escalation_level: 0,
+  escalated_at: null,
+  acknowledged_at: null,
+  acknowledged_by: null,
+  unit_id: null,
+  dispatched_at: null,
+  eta_at: null,
+  arrived_at: null,
+  close_code: null,
+  close_note: null,
+  closed_by: null,
+  is_demo: false,
 }
 
 const liveView: LiveView = {
@@ -83,6 +108,16 @@ const liveView: LiveView = {
     [77.2175, 28.632],
   ],
   responders: [],
+  police: {
+    org_name: 'Connaught Place Police Station',
+    org_phone: '011 2334 0101',
+    state: 'responding',
+    acknowledged_at: new Date().toISOString(),
+    unit: 'CP-PCR-1',
+    eta_at: new Date(Date.now() + 6 * 60_000 + 20_000).toISOString(),
+    arrived_at: null,
+    raised_to_control_room: false,
+  },
 }
 
 beforeEach(() => {
@@ -99,6 +134,8 @@ describe('active SOS screen', () => {
     expect(await screen.findByRole('heading', { name: 'SOS active' })).toBeInTheDocument()
     expect(screen.getByText(/from the virtual wearable/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Call 112 now/ })).toHaveAttribute('href', 'tel:112')
+    expect(await screen.findByText('Alerting the police')).toBeInTheDocument()
+    expect(screen.getByText(/district control room was alerted too/)).toBeInTheDocument()
 
     const whatsapp = await screen.findByRole('link', { name: /WhatsApp/ })
     expect(decodeURIComponent(whatsapp.getAttribute('href')!)).toContain('/t/tok-123')
@@ -196,6 +233,16 @@ describe('live link for trusted contacts', () => {
     expect(screen.getByRole('link', { name: 'Open in Maps' })).toHaveAttribute(
       'href',
       'https://www.google.com/maps/search/?api=1&query=28.632,77.2175',
+    )
+    expect(screen.getByText('Officer on the way')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'CP-PCR-1 from Connaught Place Police Station, arriving in about 6 minutes.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /duty desk/ })).toHaveAttribute(
+      'href',
+      'tel:01123340101',
     )
   })
 

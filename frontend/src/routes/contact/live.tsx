@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { LazyMap } from '@/features/map/lazy-map'
 import { mapsLink } from '@/features/map/links'
 import { respondToLiveLink, sosKeys, viewLiveLink, type LiveView } from '@/features/sos/api'
+import { PoliceCard } from '@/features/sos/police-card'
 import { SafePointsCard } from '@/features/sos/safe-points'
 import { useSafePoints } from '@/features/sos/use-safe-points'
 import { fallbackInterval, useLiveChannel } from '@/lib/realtime'
@@ -147,6 +148,8 @@ function LivePage({ token, view }: { token: string; view: LiveView }) {
       ) : null}
 
       {active ? <Respond token={token} name={name} contactName={view.contact_name} /> : null}
+
+      {active && view.police ? <PoliceCard response={view.police} /> : null}
 
       <Card className="gap-4">
         <CardHeader>

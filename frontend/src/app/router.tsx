@@ -1,4 +1,4 @@
-import type { RouteObject } from 'react-router'
+import { Outlet, type RouteObject } from 'react-router'
 
 import { PlaceholderPage } from '@/components/placeholder-page'
 import { STAFF_ROLES } from '@/lib/roles'
@@ -65,28 +65,8 @@ export const routes: RouteObject[] = [
               />
             ),
           },
-          {
-            path: 'report',
-            element: (
-              <PlaceholderPage
-                title="Report an incident"
-                phase="P3"
-                module="M6"
-                description="Speak or type what happened. Your location is filled in."
-              />
-            ),
-          },
-          {
-            path: 'reports/:complaintId?',
-            element: (
-              <PlaceholderPage
-                title="My reports"
-                phase="P3"
-                module="M6"
-                description="Status, timeline and in-app calls for each report."
-              />
-            ),
-          },
+          { path: 'report', lazy: () => import('@/routes/citizen/report') },
+          { path: 'reports/:complaintId?', lazy: () => import('@/routes/citizen/reports') },
           {
             path: 'vault/:itemId?',
             element: (
@@ -113,28 +93,8 @@ export const routes: RouteObject[] = [
         ),
         children: [
           { index: true, lazy: () => import('@/routes/console/live') },
-          {
-            path: 'incidents/:incidentId',
-            element: (
-              <PlaceholderPage
-                title="Incident"
-                phase="P2"
-                module="M5"
-                description="Live map, timeline, acknowledge, dispatch and resolve."
-              />
-            ),
-          },
-          {
-            path: 'complaints/:complaintId?',
-            element: (
-              <PlaceholderPage
-                title="Complaints"
-                phase="P3"
-                module="M6"
-                description="Triage queue sorted by time left, and the complaint workbench."
-              />
-            ),
-          },
+          { path: 'incidents/:incidentId', lazy: () => import('@/routes/console/incident') },
+          { path: 'complaints/:complaintId?', lazy: () => import('@/routes/console/complaints') },
           {
             path: 'cases/:caseId?',
             element: (
@@ -157,39 +117,16 @@ export const routes: RouteObject[] = [
               />
             ),
           },
-          {
-            path: 'map',
-            element: (
-              <PlaceholderPage
-                title="Map"
-                phase="P2"
-                module="M5"
-                description="Incidents, patrol units and the risk layer."
-              />
-            ),
-          },
-          {
-            path: 'reviews',
-            element: (
-              <PlaceholderPage
-                title="Reviews"
-                phase="P3"
-                module="M7"
-                description="Severity overrides waiting for supervisor review."
-              />
-            ),
-          },
+          { path: 'map', lazy: () => import('@/routes/console/map') },
+          { path: 'reviews', lazy: () => import('@/routes/console/reviews') },
           {
             path: 'admin/:section',
             element: (
               <RequireRole roles={['admin']}>
-                <PlaceholderPage
-                  title="Administration"
-                  phase="P2"
-                  description="Stations, members, escalation policies, workflows and legal tags."
-                />
+                <Outlet />
               </RequireRole>
             ),
+            children: [{ index: true, lazy: () => import('@/routes/console/admin') }],
           },
         ],
       },

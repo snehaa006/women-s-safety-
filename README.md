@@ -108,6 +108,37 @@ and set `VITE_TELEGRAM_BOT=<bot username>` in Vercel (or `frontend/.env.producti
 contact's page shows a **Telegram invite** to send them. A contact opens it once and taps Start;
 `/stop` in the bot unsubscribes them.
 
+## AI triage (optional)
+
+Every complaint is scored instantly by the rules engine in Postgres. The `triage` Edge Function
+adds an AI review with Claude when you add `ANTHROPIC_API_KEY` as an **Edge Function secret**
+(optionally `TRIAGE_MODEL`, default `claude-opus-5-5`). The model can only raise severity, never
+lower it below the rules. Without the key, reports show "Scored by the rules" and nothing else
+changes.
+
+## Demo console
+
+The hosted project has a demo district: the New Delhi District Control Room, four police
+stations with jurisdiction polygons, a campus security desk and six patrol units. Staff accounts
+are created with [`supabase/demo/staff.sql`](supabase/demo/staff.sql); the password is passed on
+the command line and never committed:
+
+```bash
+psql "$DATABASE_URL" -v password='choose-a-password' -f supabase/demo/staff.sql
+```
+
+| Account | Role |
+|---|---|
+| `admin@demo.safety.test` | Administrator: escalation policies, demo incidents |
+| `supervisor@demo.safety.test` | Supervisor, district control room |
+| `control@demo.safety.test` | Dispatcher, district control room |
+| `officer.cp@demo.safety.test` | Officer, Connaught Place Police Station |
+
+Sign in at `/login`, then use **Load demo incidents** on the live board and **Load demo
+complaints** on `/console/complaints` (admins and supervisors) to start SOS alerts and reports at
+different escalation stages. A citizen SOS from central
+New Delhi (or the virtual wearable's demo walk) is routed to the station that covers it.
+
 ## Deploy
 
 **Frontend (Vercel):** in Vercel, choose **Add New → Project**, import `snehaa006/women-s-safety-`, set **Root Directory** to `frontend`, and deploy. Vite is detected automatically; `frontend/vercel.json` handles routing and caching; `frontend/.env.production` holds the public Supabase URL and key, so no environment variables are needed. Vercel deploys `main` to production and every other branch as a preview.

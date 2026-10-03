@@ -1112,6 +1112,149 @@ export type Database = {
           },
         ]
       }
+      journey_points: {
+        Row: {
+          accuracy_m: number | null
+          at: string
+          id: number
+          journey_id: string
+          lat: number
+          lng: number
+        }
+        Insert: {
+          accuracy_m?: number | null
+          at?: string
+          id?: never
+          journey_id: string
+          lat: number
+          lng: number
+        }
+        Update: {
+          accuracy_m?: number | null
+          at?: string
+          id?: never
+          journey_id?: string
+          lat?: number
+          lng?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'journey_points_journey_id_fkey'
+            columns: ['journey_id']
+            isOneToOne: false
+            referencedRelation: 'journeys'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      journeys: {
+        Row: {
+          check_in_due_at: string | null
+          check_in_reason: string | null
+          citizen_id: string
+          client_id: string | null
+          created_at: string
+          dest_lat: number
+          dest_lng: number
+          dest_name: string | null
+          ended_at: string | null
+          escalation_reason: string | null
+          expected_arrival_at: string | null
+          id: string
+          incident_id: string | null
+          last_accuracy_m: number | null
+          last_lat: number | null
+          last_lng: number | null
+          last_moved_at: string | null
+          last_ping_at: string | null
+          monitoring: string
+          moved_lat: number | null
+          moved_lng: number | null
+          off_route_m: number | null
+          off_route_since: string | null
+          route: unknown
+          route_label: string | null
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          check_in_due_at?: string | null
+          check_in_reason?: string | null
+          citizen_id: string
+          client_id?: string | null
+          created_at?: string
+          dest_lat: number
+          dest_lng: number
+          dest_name?: string | null
+          ended_at?: string | null
+          escalation_reason?: string | null
+          expected_arrival_at?: string | null
+          id?: string
+          incident_id?: string | null
+          last_accuracy_m?: number | null
+          last_lat?: number | null
+          last_lng?: number | null
+          last_moved_at?: string | null
+          last_ping_at?: string | null
+          monitoring?: string
+          moved_lat?: number | null
+          moved_lng?: number | null
+          off_route_m?: number | null
+          off_route_since?: string | null
+          route?: unknown
+          route_label?: string | null
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          check_in_due_at?: string | null
+          check_in_reason?: string | null
+          citizen_id?: string
+          client_id?: string | null
+          created_at?: string
+          dest_lat?: number
+          dest_lng?: number
+          dest_name?: string | null
+          ended_at?: string | null
+          escalation_reason?: string | null
+          expected_arrival_at?: string | null
+          id?: string
+          incident_id?: string | null
+          last_accuracy_m?: number | null
+          last_lat?: number | null
+          last_lng?: number | null
+          last_moved_at?: string | null
+          last_ping_at?: string | null
+          monitoring?: string
+          moved_lat?: number | null
+          moved_lng?: number | null
+          off_route_m?: number | null
+          off_route_since?: string | null
+          route?: unknown
+          route_label?: string | null
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'journeys_citizen_id_fkey'
+            columns: ['citizen_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'journeys_incident_id_fkey'
+            columns: ['incident_id']
+            isOneToOne: false
+            referencedRelation: 'incidents'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       ledger_anchors: {
         Row: {
           attempts: number
@@ -1437,6 +1580,39 @@ export type Database = {
         }
         Relationships: []
       }
+      risk_cells: {
+        Row: {
+          cell_x: number
+          cell_y: number
+          computed_at: string
+          factors: Json
+          level: string
+          period: string
+          score: number
+          signals: number
+        }
+        Insert: {
+          cell_x: number
+          cell_y: number
+          computed_at: string
+          factors?: Json
+          level: string
+          period: string
+          score: number
+          signals: number
+        }
+        Update: {
+          cell_x?: number
+          cell_y?: number
+          computed_at?: string
+          factors?: Json
+          level?: string
+          period?: string
+          score?: number
+          signals?: number
+        }
+        Relationships: []
+      }
       safe_points: {
         Row: {
           address: string | null
@@ -1711,6 +1887,50 @@ export type Database = {
           },
         ]
       }
+      zone_reports: {
+        Row: {
+          at_night: boolean
+          created_at: string
+          id: string
+          is_demo: boolean
+          kind: string
+          lat: number
+          lng: number
+          note: string | null
+          reporter_id: string | null
+        }
+        Insert: {
+          at_night: boolean
+          created_at?: string
+          id?: string
+          is_demo?: boolean
+          kind: string
+          lat: number
+          lng: number
+          note?: string | null
+          reporter_id?: string | null
+        }
+        Update: {
+          at_night?: boolean
+          created_at?: string
+          id?: string
+          is_demo?: boolean
+          kind?: string
+          lat?: number
+          lng?: number
+          note?: string | null
+          reporter_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'zone_reports_reporter_id_fkey'
+            columns: ['reporter_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1902,6 +2122,10 @@ export type Database = {
         }
         Returns: Json
       }
+      end_journey: {
+        Args: { p_arrived?: boolean; p_journey_id: string }
+        Returns: Json
+      }
       evidence_timeline: {
         Args: { p_evidence_id: string }
         Returns: {
@@ -1963,6 +2187,20 @@ export type Database = {
           seq: number
         }[]
       }
+      journey_check_in: {
+        Args: { p_journey_id: string; p_pin?: string }
+        Returns: Json
+      }
+      journey_ping: {
+        Args: {
+          p_accuracy_m?: number
+          p_journey_id: string
+          p_lat: number
+          p_lng: number
+        }
+        Returns: Json
+      }
+      journey_view: { Args: { p_journey_id: string }; Returns: Json }
       ledger_verify: {
         Args: { p_from_seq?: number }
         Returns: {
@@ -2038,6 +2276,16 @@ export type Database = {
         }
         Returns: Json
       }
+      report_zone: {
+        Args: {
+          p_at_night?: boolean
+          p_kind: string
+          p_lat: number
+          p_lng: number
+          p_note?: string
+        }
+        Returns: Json
+      }
       request_evidence_deletion: {
         Args: { p_evidence_id: string }
         Returns: Json
@@ -2059,6 +2307,8 @@ export type Database = {
         Args: { p_decision: string; p_note?: string; p_override_id: string }
         Returns: Json
       }
+      risk_map: { Args: { p_period?: string }; Returns: Json }
+      score_routes: { Args: { p_at?: string; p_routes: Json }; Returns: Json }
       set_complaint_severity: {
         Args: {
           p_complaint_id: string
@@ -2106,6 +2356,20 @@ export type Database = {
           p_evidence_id: string
           p_reason: string
           p_to_user: string
+        }
+        Returns: Json
+      }
+      start_journey: {
+        Args: {
+          p_client_id?: string
+          p_dest_lat: number
+          p_dest_lng: number
+          p_dest_name?: string
+          p_expected_minutes?: number
+          p_lat?: number
+          p_lng?: number
+          p_route?: Json
+          p_route_label?: string
         }
         Returns: Json
       }

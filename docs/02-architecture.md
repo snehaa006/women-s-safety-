@@ -453,6 +453,8 @@ flowchart LR
 
 - **Legal tags:** a `legal_tag_map` table maps categories to candidate penal-code sections (for example under the Bharatiya Nyaya Sanhita). A legal reviewer maintains it, and officers see the tags only as **suggestions**.
 
+**As built (P3).** Rules: `private.triage_rules()` over `private.triage_lexicon` (regular expressions in English, Hindi and Hinglish) and `private.triage_categories` (base / just now / happening now severities). AI: the `triage` Edge Function claims work with `claim_triage()` and reports with `finish_triage()` (service role only); the adapter uses structured outputs (JSON schema) because forced tool use is not available on `claude-opus-5-5`, and keeps the rules' answer on a refusal. Speech-to-text is the browser's live dictation for now (§9.2).
+
 ### 9.2 Speech-to-text
 
 - **In the browser:** live dictation through the Web Speech API (Chrome/Android, `en-IN` / `hi-IN`). Text appears instantly at no cost.

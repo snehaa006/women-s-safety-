@@ -108,6 +108,14 @@ and set `VITE_TELEGRAM_BOT=<bot username>` in Vercel (or `frontend/.env.producti
 contact's page shows a **Telegram invite** to send them. A contact opens it once and taps Start;
 `/stop` in the bot unsubscribes them.
 
+## AI triage (optional)
+
+Every complaint is scored instantly by the rules engine in Postgres. The `triage` Edge Function
+adds an AI review with Claude when you add `ANTHROPIC_API_KEY` as an **Edge Function secret**
+(optionally `TRIAGE_MODEL`, default `claude-opus-5-5`). The model can only raise severity, never
+lower it below the rules. Without the key, reports show "Scored by the rules" and nothing else
+changes.
+
 ## Demo console
 
 The hosted project has a demo district: the New Delhi District Control Room, four police
@@ -126,8 +134,9 @@ psql "$DATABASE_URL" -v password='choose-a-password' -f supabase/demo/staff.sql
 | `control@demo.safety.test` | Dispatcher, district control room |
 | `officer.cp@demo.safety.test` | Officer, Connaught Place Police Station |
 
-Sign in at `/login`, then use **Load demo incidents** on the live board (admins and
-supervisors) to start three SOS alerts at different escalation stages. A citizen SOS from central
+Sign in at `/login`, then use **Load demo incidents** on the live board and **Load demo
+complaints** on `/console/complaints` (admins and supervisors) to start SOS alerts and reports at
+different escalation stages. A citizen SOS from central
 New Delhi (or the virtual wearable's demo walk) is routed to the station that covers it.
 
 ## Deploy

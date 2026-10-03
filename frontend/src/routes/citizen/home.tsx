@@ -29,9 +29,9 @@ import { paths } from '@/lib/paths'
 import { formatDateTime } from '@/lib/time'
 
 const quickActions = [
-  { icon: MessageSquareWarning, label: 'Report an incident', phase: 'P3' },
-  { icon: Footprints, label: 'Start a safe journey', phase: 'P5' },
-  { icon: PhoneIncoming, label: 'Fake call', phase: 'P7' },
+  { icon: MessageSquareWarning, label: 'Report an incident', phase: null, to: paths.app.report },
+  { icon: Footprints, label: 'Start a safe journey', phase: 'P5', to: null },
+  { icon: PhoneIncoming, label: 'Fake call', phase: 'P7', to: null },
 ] as const
 
 export function Component() {
@@ -64,17 +64,31 @@ export function Component() {
           Quick actions
         </h2>
         <ul className="grid gap-3 sm:grid-cols-3">
-          {quickActions.map(({ icon: Icon, label, phase }) => (
+          {quickActions.map(({ icon: Icon, label, phase, to }) => (
             <li key={label}>
-              <Card className="gap-0 py-4 opacity-70">
-                <CardContent className="flex items-center justify-between gap-2 px-4">
-                  <span className="flex items-center gap-2 font-medium">
-                    <Icon className="text-primary size-5" aria-hidden />
-                    {label}
-                  </span>
-                  <PhaseBadge phase={phase} />
-                </CardContent>
-              </Card>
+              {to ? (
+                <Link to={to} className="block">
+                  <Card className="hover:bg-accent/40 gap-0 py-4">
+                    <CardContent className="flex items-center justify-between gap-2 px-4">
+                      <span className="flex items-center gap-2 font-medium">
+                        <Icon className="text-primary size-5" aria-hidden />
+                        {label}
+                      </span>
+                      <ChevronRight className="text-muted-foreground size-4" aria-hidden />
+                    </CardContent>
+                  </Card>
+                </Link>
+              ) : (
+                <Card className="gap-0 py-4 opacity-70">
+                  <CardContent className="flex items-center justify-between gap-2 px-4">
+                    <span className="flex items-center gap-2 font-medium">
+                      <Icon className="text-primary size-5" aria-hidden />
+                      {label}
+                    </span>
+                    {phase ? <PhaseBadge phase={phase} /> : null}
+                  </CardContent>
+                </Card>
+              )}
             </li>
           ))}
         </ul>

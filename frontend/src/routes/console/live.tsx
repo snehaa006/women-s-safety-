@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BatteryMedium,
   Inbox,
@@ -11,11 +11,13 @@ import {
 import { Link } from 'react-router'
 
 import { PageHeader } from '@/components/page-header'
-import { PhaseBadge } from '@/components/phase-badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { consoleComplaintKeys, fetchQueue } from '@/features/complaints/api'
+import { timeLeft } from '@/features/complaints/labels'
+import { SeverityBadge } from '@/features/complaints/severity-badge'
 import { acknowledgeIncident, loadDemoIncidents, type BoardIncident } from '@/features/console/api'
 import { BoardMap } from '@/features/console/board-map'
 import {
@@ -94,19 +96,7 @@ export function Component() {
 
         <div className="grid content-start gap-4">
           <BoardMap incidents={incidents} className="h-72" />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Inbox className="text-primary size-4" aria-hidden />
-                Complaint queue
-              </CardTitle>
-              <CardDescription>Sorted by time left to acknowledge.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-muted-foreground flex items-center justify-between gap-2 text-sm">
-              Triage and countdowns arrive with smart complaints.
-              <PhaseBadge phase="P3" />
-            </CardContent>
-          </Card>
+          <ComplaintSummary now={now} />
         </div>
       </div>
     </div>
@@ -211,5 +201,45 @@ function DemoButton() {
         Load demo incidents
       </Button>
     </span>
+  )
+}
+
+/** The most urgent complaints, with their countdowns. The full queue is on /console/complaints. */
+function ComplaintSummary({ now }: { now: number }) {
+  const queue = useQuery({ queryKey: consoleComplaintKeys.queue, queryFn: fetchQueue })
+  const waiting = (queue.data ?? []).filter((c) => !c.acknowledged_at)
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Inbox className="text-primary size-4" aria-hidden />
+          Complaint queue
+        </CardTitle>
+        <CardDescription>
+          {queue.isPending ? 'Loading…' : `${waiting.length} waiting for acknowledgement`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2 text-sm">
+        {waiting.slice(0, 3).map((c) => {
+          const left = timeLeft(c.sla_due_at, now)
+          return (
+            <Link
+              key={c.id}
+              to={paths.console.complaint(c.id)}
+              className="hover:bg-accent/40 flex items-center gap-2 rounded-md p-1"
+            >
+              <SeverityBadge severity={c.severity} />
+              <span className="min-w-0 flex-1 truncate">{c.category_label}</span>
+              <span className={cn('font-mono tabular-nums', left.overdue && 'text-sos')}>
+                {left.text}
+              </span>
+            </Link>
+          )
+        })}
+        <Link to={paths.console.complaints} className="text-primary w-fit underline">
+          Open the queue
+        </Link>
+      </CardContent>
+    </Card>
   )
 }

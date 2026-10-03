@@ -171,14 +171,14 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** frictionless reporting that is scored, routed and cannot be quietly downgraded.
 
-**Status (October 2026):** built and live on the Supabase project. The rules triage runs on every report; the Claude adapter is deployed as the `triage` Edge Function and switches on when `ANTHROPIC_API_KEY` is added as a function secret (README → AI triage). Until then each report records "AI review skipped" and the rules' answer stands.
+**Status (October 2026):** built and live on the Supabase project. The rules triage runs on every report; the Gemini adapter is deployed as the `triage` Edge Function and switches on when `GEMINI_API_KEY` is added as a function secret (README → AI triage). Until then each report records "AI review skipped" and the rules' answer stands.
 
 **Built**
 
 - **Rules engine** (`20261003183841`): a lexicon of English, Hindi (Devanagari) and Hinglish patterns in `private.triage_lexicon` plus per-category severities for past / just now / happening now. `private.triage_rules()` returns category, severity floor, signals, language and a rationale in a few milliseconds. *"ek aadmi metro se mera peecha kar raha hai"* → stalking, L4, "happening now, on public transport". The report screen shows this answer live as the citizen types (`triage_preview`).
 - **Filing** (`create_complaint`): idempotent by client id, routed with the P2 jurisdiction lookup (else the control room), SLA deadline from `complaint_sla` (L5 3 min, L4 10, L3 20, L2 30, L1 4 h), ledger `complaint.filed` with a SHA-256 of the text.
 - **SLA ladder:** a `complaint.escalate` job at the deadline; missed → the station's queue flashes red (level 1), then raised to the organisation above (level 2), then repeats that flag oversight. Acknowledging stops it. A severity change moves the deadline.
-- **AI triage** (`triage` Edge Function, `_shared/triage.ts`): claims waiting complaints (`claim_triage`, service role only), asks `claude-opus-5-5` at low effort for schema-checked JSON (structured outputs), handles refusals and retries, and reports with `finish_triage`, which enforces *final = max(rules floor, model)*, ignores unknown categories and tightens the SLA when severity rises. Checks at 45 s, +60 s, +60 s re-ask the function; after three silent tries it records "AI review failed".
+- **AI triage** (`triage` Edge Function, `_shared/triage.ts`): claims waiting complaints (`claim_triage`, service role only), asks Gemini (`gemini-flash-latest`) for schema-checked JSON (controlled generation), handles safety blocks and retries, and reports with `finish_triage`, which enforces *final = max(rules floor, model)*, ignores unknown categories and tightens the SLA when severity rises. Checks at 45 s, +60 s, +60 s re-ask the function; after three silent tries it records "AI review failed".
 - **Accountability lock** (`set_complaint_severity`): raising is free; going below the AI baseline needs a justification of at least 20 characters, writes `severity_overrides` and the ledger, and lands in `/console/reviews` for supervisors of that station or above (never the officer who made it), grouped by week. Reversing needs a note and restores the baseline.
 - **Confidential mode:** officers see "Reporter 7F3K" and no name, phone or account id anywhere in the console RPCs; the citizen can share their identity later (`share_complaint_identity`, logged). *Note:* the link to the account stays in the database, protected by RLS and the RPCs, rather than encrypted with a separate key; key-based encryption is part of the P9 hardening.
 - **Screens:** `/app/report` (text or live dictation in English or Hindi via the browser's speech recognition, location, "when", confidential toggle), `/app/reports` and `/app/reports/:id` (status, police note, timeline, share identity), `/console/complaints` (queue with live countdowns), `/console/complaints/:id` (workbench: report, rules and AI panels, acknowledge, in progress, change severity, resolve/close with a note for the citizen, sealed timeline), `/console/reviews`. The live board shows the three most urgent complaints. "Load demo complaints" (admins, supervisors) files four mock reports, one already past its SLA.
@@ -196,7 +196,7 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Done when** *(checked items are covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] A Hinglish voice note such as *"ek aadmi metro se mera peecha kar raha hai"* becomes a transcript, category `stalking`, L4 and a rationale. The rules answer is instant and the AI update follows within about 30 s. *(Transcript and the instant rules answer are done; the AI update needs `ANTHROPIC_API_KEY`. Voice uses the browser's live dictation, not a server-side speech model.)*
+- [ ] A Hinglish voice note such as *"ek aadmi metro se mera peecha kar raha hai"* becomes a transcript, category `stalking`, L4 and a rationale. The rules answer is instant and the AI update follows within about 30 s. *(Transcript and the instant rules answer are done; the AI update needs `GEMINI_API_KEY`. Voice uses the browser's live dictation, not a server-side speech model.)*
 - [x] An L5 complaint shows a 3-minute countdown. A missed SLA escalates.
 - [x] Downgrading below the AI severity is blocked until a justification is entered. The override then appears in the supervisor's review queue.
 - [x] Confidential complaints never show the citizen's name or phone number to officers.
@@ -328,7 +328,7 @@ D1 to D4 are decided. The rest have recommended defaults; confirm or change them
 | D2 | Database & files | **Decided: Supabase** Postgres + PostGIS + Storage (project `women's safety`) | Cloudflare R2 for evidence if storage outgrows 1 GB |
 | D3 | Auth | **Decided: Supabase Auth**, roles in `profiles`, checked by RLS | n/a |
 | D4 | Frontend hosting | **Decided: Vercel** (global CDN, preview URL per PR) | Cloudflare Pages, Render Static Site |
-| D5 | Triage AI | **Decided: rules engine first** (built in P3). The Claude API adapter (`claude-opus-5-5`, low effort, structured output) is deployed and switches on with `ANTHROPIC_API_KEY`. | HF ZeroGPU Space (free, quota-limited) |
+| D5 | Triage AI | **Decided: rules engine first** (built in P3). The Gemini API adapter (`gemini-flash-latest`, schema-constrained JSON) is deployed and switches on with `GEMINI_API_KEY`. | HF ZeroGPU Space (free, quota-limited) |
 | D6 | "Blockchain" | **Hash-chained ledger + OpenTimestamps**, with an optional testnet contract for the demo | Running a blockchain node (not recommended) |
 | D7 | Demo notification channels | **Web Push + email + Telegram**, then Twilio SMS/WhatsApp sandbox | MSG91 (needs DLT), Meta WhatsApp Cloud API |
 | D8 | In-app calls | **WebRTC + a free TURN service** | LiveKit or Daily free tier |

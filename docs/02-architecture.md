@@ -107,7 +107,7 @@ flowchart LR
 | Realtime | **Supabase Realtime** (broadcast from the database, private channels checked by RLS) | |
 | Notifications | Web Push (VAPID), email (an HTTP API such as Resend), SMS/WhatsApp (Twilio or Meta Cloud API), optional Telegram bot | Sent by the `notify` Edge Function (§8). |
 | Geo data | OpenStreetMap, Overpass API (safe points), OpenRouteService (walking routes), Nominatim (geocoding), Uber H3 (risk grid) | |
-| AI | Rules engine (always on) + Whisper speech-to-text + a triage model (Claude API or an HF ZeroGPU Space) | §9 |
+| AI | Rules engine (always on) + Whisper speech-to-text + a triage model (Gemini API or an HF ZeroGPU Space) | §9 |
 | **Hosting** | Vercel (frontend), Supabase (database, API, functions, files, auth) | §2, §15 |
 | CI/CD | GitHub Actions + Vercel Git integration | Lint, type-check and tests on every PR. Vercel deploys the frontend. |
 
@@ -420,7 +420,7 @@ flowchart LR
 
   | Adapter | What | Cost | Trade-off |
   |---|---|---|---|
-  | **A. Claude API** | `claude-opus-5-5` at **low effort** (a classification route). Schema-constrained JSON through structured outputs (Python SDK: `client.messages.parse(..., output_format=TriageResult)` with a Pydantic model). | Paid per call | Best with Hinglish and mixed-language text. Returns a readable rationale. Handle the `refusal` stop reason by keeping the rules result. |
+  | **A. Gemini API** | `gemini-flash-latest` (override with `TRIAGE_MODEL`) through the REST `generateContent` call. Schema-constrained JSON through controlled generation (`responseMimeType: application/json` + `responseSchema`). | Free tier, then paid per call | Good with Hinglish and mixed-language text. Returns a readable rationale. A safety block (`promptFeedback.blockReason` or a `SAFETY`-type finish reason) keeps the rules result. |
   | **B. HF ZeroGPU Space** | Gradio Space running Whisper plus a multilingual zero-shot classifier, called with `gradio_client` | Free (5 GPU-min/day) | Can queue or cold-start. Weaker on romanized Hindi. |
 
 - **Combining rule:** `final_ai_severity = max(rules_floor, model_severity)`. The model can raise severity but never lower it below the rules floor.
@@ -434,8 +434,8 @@ flowchart LR
     "signals": ["being_followed", "night", "isolated_location"],
     "rationale": "Reporter says a man has followed her from the metro for 10 minutes and she is alone.",
     "legal_tags": ["BNS:stalking"],
-    "provider": "claude",
-    "model": "claude-opus-5-5",
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
     "rules_floor": 4,
     "version": "triage-v1"
   }
@@ -453,7 +453,7 @@ flowchart LR
 
 - **Legal tags:** a `legal_tag_map` table maps categories to candidate penal-code sections (for example under the Bharatiya Nyaya Sanhita). A legal reviewer maintains it, and officers see the tags only as **suggestions**.
 
-**As built (P3).** Rules: `private.triage_rules()` over `private.triage_lexicon` (regular expressions in English, Hindi and Hinglish) and `private.triage_categories` (base / just now / happening now severities). AI: the `triage` Edge Function claims work with `claim_triage()` and reports with `finish_triage()` (service role only); the adapter uses structured outputs (JSON schema) because forced tool use is not available on `claude-opus-5-5`, and keeps the rules' answer on a refusal. Speech-to-text is the browser's live dictation for now (§9.2).
+**As built (P3).** Rules: `private.triage_rules()` over `private.triage_lexicon` (regular expressions in English, Hindi and Hinglish) and `private.triage_categories` (base / just now / happening now severities). AI: the `triage` Edge Function claims work with `claim_triage()` and reports with `finish_triage()` (service role only); the Gemini adapter asks for schema-constrained JSON (`responseSchema`), sends the key in the `x-goog-api-key` header, and keeps the rules' answer when Gemini blocks the request. (P3 first shipped a Claude adapter; it was swapped for Gemini.) Speech-to-text is the browser's live dictation for now (§9.2).
 
 ### 9.2 Speech-to-text
 

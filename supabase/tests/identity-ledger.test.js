@@ -139,35 +139,54 @@ describe('public API surface', () => {
       [
         'acknowledge_complaint',
         'acknowledge_incident',
+        'add_case_note',
         'admin_load_demo_complaints',
         'admin_load_demo_incidents',
+        'admin_save_workflow',
         'admin_set_escalation_policy',
         'admin_set_role',
+        'advance_case',
+        'cancel_evidence_deletion',
+        'case_checkin',
         'claim_alerts',
+        'claim_anchors',
+        'claim_evidence_checks',
         'claim_triage',
         'close_incident',
         'complaint_timeline',
+        'confirm_evidence_upload',
         'console_board',
+        'console_case',
+        'console_cases',
         'console_complaint',
         'console_complaints',
+        'console_evidence',
         'console_incident',
         'console_reviews',
+        'console_workflows',
         'create_complaint',
         'create_sos',
         'device_event',
         'disconnect_telegram',
         'dispatch_unit',
+        'evidence_timeline',
         'finish_alert',
+        'finish_anchor',
+        'finish_evidence_check',
         'finish_triage',
         'incident_response',
         'incident_timeline',
         'ledger_verify',
         'link_telegram',
         'mark_on_scene',
+        'open_case',
         'record_location',
         'register_device',
+        'register_evidence',
+        'request_evidence_deletion',
         'reset_device_secret',
         'resolve_incident',
+        'respond_custody_transfer',
         'respond_to_share_link',
         'review_override',
         'set_complaint_severity',
@@ -175,35 +194,48 @@ describe('public API surface', () => {
         'set_on_duty',
         'set_sos_pins',
         'share_complaint_identity',
+        'share_evidence',
+        'sign_evidence_lock',
         'sos_pin_status',
+        'start_custody_transfer',
         'triage_preview',
         'unlink_telegram_chat',
+        'vault_item',
+        'verify_evidence',
         'view_share_link',
       ],
     )
   })
 
-  it('lets anonymous visitors call only the live-link, device and safe-point RPCs', async () => {
+  it('lets anonymous visitors call only the live-link, device, safe-point and verifier RPCs', async () => {
     const { rows } = await db.query(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('public', 'private') and has_function_privilege('anon', p.oid, 'execute')
       order by p.proname`)
     assert.deepEqual(
       rows.map((r) => r.proname),
-      ['device_event', 'nearby_safe_points', 'respond_to_share_link', 'view_share_link'],
+      [
+        'device_event',
+        'nearby_safe_points',
+        'respond_to_share_link',
+        'verify_evidence',
+        'view_share_link',
+      ],
     )
   })
 
-  it('keeps the sending and Telegram-linking RPCs for the service role only', async () => {
+  it('keeps the sending, Telegram-linking, evidence-check and anchor RPCs for the service role only', async () => {
     const { rows } = await db.query(`
       select p.proname,
              has_function_privilege('authenticated', p.oid, 'execute') as signed_in,
              has_function_privilege('service_role', p.oid, 'execute') as service
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public'
-        and p.proname in ('claim_alerts', 'finish_alert', 'link_telegram', 'unlink_telegram_chat')
+        and p.proname in ('claim_alerts', 'finish_alert', 'link_telegram', 'unlink_telegram_chat',
+                          'claim_evidence_checks', 'finish_evidence_check', 'claim_anchors',
+                          'finish_anchor')
       order by p.proname`)
-    assert.equal(rows.length, 4)
+    assert.equal(rows.length, 8)
     for (const row of rows) {
       assert.deepEqual([row.signed_in, row.service], [false, true], row.proname)
     }

@@ -2,7 +2,8 @@
 // already scored the complaint; the model may only add detail and raise severity, which
 // finish_triage() enforces. Without an API key every complaint is recorded as "skipped".
 //
-// Pure logic: the Claude call is injected, so the tests run on Node without the SDK or network.
+// The model is Google Gemini, called over its REST API. Pure logic: the HTTP call is injected,
+// so the tests run on Node without network.
 
 export type ClaimedComplaint = {
   complaint_id: string
@@ -43,21 +44,23 @@ export const CATEGORIES = [
   'other',
 ] as const
 
-export const DEFAULT_MODEL = 'claude-opus-5-5'
+// The "latest" alias follows Google's current Flash model; TRIAGE_MODEL pins another one.
+export const DEFAULT_MODEL = 'gemini-flash-latest'
 
-/** The JSON the model must return (structured outputs; forced tool use is not available). */
+/** The JSON the model must return (Gemini's controlled generation: an OpenAPI schema subset with
+ * upper-case type names; integer enums aren't supported, so severity uses minimum/maximum). */
 export const RESULT_SCHEMA = {
-  type: 'object',
+  type: 'OBJECT',
   properties: {
-    category: { type: 'string', enum: [...CATEGORIES] },
-    severity: { type: 'integer', enum: [1, 2, 3, 4, 5] },
-    confidence: { type: 'number' },
-    signals: { type: 'array', items: { type: 'string' } },
-    rationale: { type: 'string' },
-    legal_tags: { type: 'array', items: { type: 'string' } },
+    category: { type: 'STRING', enum: [...CATEGORIES] },
+    severity: { type: 'INTEGER', minimum: 1, maximum: 5 },
+    confidence: { type: 'NUMBER' },
+    signals: { type: 'ARRAY', items: { type: 'STRING' } },
+    rationale: { type: 'STRING' },
+    legal_tags: { type: 'ARRAY', items: { type: 'STRING' } },
   },
   required: ['category', 'severity', 'confidence', 'signals', 'rationale', 'legal_tags'],
-  additionalProperties: false,
+  propertyOrdering: ['category', 'severity', 'confidence', 'signals', 'rationale', 'legal_tags'],
 } as const
 
 export const SYSTEM_PROMPT = `You triage reports filed with a women's safety service in India. Reports may be in English, Hindi (Devanagari) or romanized Hindi (Hinglish). Classify each report so the police see the most urgent ones first.
@@ -89,46 +92,60 @@ export function userPrompt(complaint: ClaimedComplaint) {
   ].join('\n')
 }
 
-/** The subset of a Messages API response this adapter reads. */
+/** The subset of a generateContent response this adapter reads. */
 export type ModelResponse = {
-  model: string
-  stop_reason: string | null
-  stop_details?: { category?: string | null; explanation?: string | null } | null
-  content: { type: string; text?: string }[]
+  modelVersion?: string
+  promptFeedback?: { blockReason?: string | null } | null
+  candidates?: {
+    finishReason?: string | null
+    content?: { parts?: { text?: string; thought?: boolean }[] } | null
+  }[]
 }
 
-export type CreateMessage = (params: Record<string, unknown>) => Promise<ModelResponse>
+/** Posts a generateContent request for `model`; throws an Error with `status` on HTTP errors. */
+export type GenerateContent = (model: string, body: Record<string, unknown>) => Promise<ModelResponse>
 
 /** Retry on rate limits, overload and server errors; not on bad requests or auth. */
 export function retryableStatus(status: number | undefined) {
   return status === undefined || status === 408 || status === 409 || status === 429 || status >= 500
 }
 
-export function buildParams(complaint: ClaimedComplaint, model: string) {
+/** Finish reasons that mean the model declined on safety or policy grounds. */
+const DECLINED = new Set(['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'RECITATION'])
+
+export function buildRequest(complaint: ClaimedComplaint) {
   return {
-    model,
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt(complaint) }],
-    // A classification: low effort is plenty, and keeps the answer within seconds.
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: RESULT_SCHEMA } },
-    // If the model declines on safety grounds, the API retries on a suitable fallback model.
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: userPrompt(complaint) }] }],
+    generationConfig: {
+      // A classification: a low temperature keeps the answer stable between retries.
+      temperature: 0.2,
+      // Thinking models count their thoughts here too, so leave room beyond the short answer.
+      maxOutputTokens: 8192,
+      responseMimeType: 'application/json',
+      responseSchema: RESULT_SCHEMA,
+    },
+    // Reports describe violence by design; only block content that is itself extreme.
+    safetySettings: [
+      'HARM_CATEGORY_HARASSMENT',
+      'HARM_CATEGORY_HATE_SPEECH',
+      'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+      'HARM_CATEGORY_DANGEROUS_CONTENT',
+    ].map((category) => ({ category, threshold: 'BLOCK_ONLY_HIGH' })),
   }
 }
 
 /** Calls the model for one complaint and checks its answer. Never throws. */
 export async function classify(
   complaint: ClaimedComplaint,
-  createMessage: CreateMessage | null,
+  generate: GenerateContent | null,
   model = DEFAULT_MODEL,
 ): Promise<TriageOutcome> {
-  if (!createMessage) return { outcome: 'skipped', error: 'No AI model is set up' }
+  if (!generate) return { outcome: 'skipped', error: 'No AI model is set up' }
 
   let response: ModelResponse
   try {
-    response = await createMessage(buildParams(complaint, model))
+    response = await generate(model, buildRequest(complaint))
   } catch (error) {
     const status = (error as { status?: number }).status
     return {
@@ -139,20 +156,19 @@ export async function classify(
   }
 
   // A declined request keeps the rules' answer; retrying would decline again.
-  if (response.stop_reason === 'refusal') {
-    return {
-      outcome: 'failed',
-      error: `The model declined${response.stop_details?.category ? ` (${response.stop_details.category})` : ''}`,
-      retry: false,
-    }
+  const blocked = response.promptFeedback?.blockReason
+  const candidate = response.candidates?.[0]
+  const finish = candidate?.finishReason ?? null
+  if (blocked || (finish && DECLINED.has(finish))) {
+    return { outcome: 'failed', error: `The model declined (${blocked ?? finish})`, retry: false }
   }
-  if (response.stop_reason === 'max_tokens') {
+  if (finish === 'MAX_TOKENS') {
     return { outcome: 'failed', error: 'The model answer was cut off', retry: true }
   }
 
-  const text = response.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text ?? '')
+  const text = (candidate?.content?.parts ?? [])
+    .filter((part) => !part.thought)
+    .map((part) => part.text ?? '')
     .join('')
   let parsed: Record<string, unknown>
   try {
@@ -179,9 +195,38 @@ export async function classify(
       signals: strings(parsed.signals),
       rationale: String(parsed.rationale ?? '').slice(0, 600),
       legal_tags: strings(parsed.legal_tags),
-      provider: 'claude',
-      model: response.model,
+      provider: 'gemini',
+      model: response.modelVersion ?? model,
     },
+  }
+}
+
+/** The real call: Gemini's REST API with the key in a header, never in the URL. */
+export function geminiClient(
+  apiKey: string,
+  fetchFn: typeof fetch = fetch,
+  { timeoutMs = 45_000 } = {},
+): GenerateContent {
+  return async (model, body) => {
+    const response = await fetchFn(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    )
+    if (!response.ok) {
+      let message = response.statusText
+      try {
+        message = (await response.json())?.error?.message ?? message
+      } catch {
+        // keep the status text
+      }
+      throw Object.assign(new Error(message || 'HTTP error'), { status: response.status })
+    }
+    return (await response.json()) as ModelResponse
   }
 }
 

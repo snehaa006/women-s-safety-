@@ -19,12 +19,14 @@ import {
   type EscalationPolicy,
 } from '@/features/console/api'
 import { formatDuration } from '@/features/console/board'
+import { caseKeys, fetchWorkflows, saveWorkflow, type Workflow } from '@/features/evidence/api'
 import { paths } from '@/lib/paths'
 import { formatDateTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 
 const SECTIONS = [
   { id: 'escalation', label: 'Escalation' },
+  { id: 'workflows', label: 'Workflows' },
   { id: 'stations', label: 'Stations' },
 ] as const
 
@@ -34,7 +36,7 @@ export function Component() {
     <div className="grid gap-6">
       <PageHeader
         title="Administration"
-        description="How long an SOS may wait before it is raised, and the stations that take them."
+        description="How long an SOS may wait before it is raised, the procedure cases follow, and the stations that take them."
       />
       <nav aria-label="Administration" className="flex gap-1">
         {SECTIONS.map((s) => (
@@ -52,7 +54,13 @@ export function Component() {
           </NavLink>
         ))}
       </nav>
-      {section === 'stations' ? <Stations /> : <Escalation />}
+      {section === 'stations' ? (
+        <Stations />
+      ) : section === 'workflows' ? (
+        <Workflows />
+      ) : (
+        <Escalation />
+      )}
     </div>
   )
 }
@@ -239,6 +247,164 @@ function PolicyForm({ policy }: { policy: EscalationPolicy }) {
           <Button type="submit" className="w-fit" disabled={save.isPending}>
             Save policy
           </Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+/** Procedures as data: each step lists what must be done before a case may enter it. */
+function Workflows() {
+  const workflows = useQuery({ queryKey: caseKeys.workflows, queryFn: fetchWorkflows })
+  if (workflows.isPending) {
+    return (
+      <p className="text-muted-foreground flex items-center gap-2 text-sm">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden /> Loading workflows…
+      </p>
+    )
+  }
+  if (workflows.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{workflows.error.message}</AlertDescription>
+      </Alert>
+    )
+  }
+  return (
+    <div className="grid gap-4">
+      {workflows.data.workflows.map((w) => (
+        <WorkflowForm
+          key={`${w.key}-${w.version}`}
+          workflow={w}
+          requirements={workflows.data.requirements}
+        />
+      ))}
+    </div>
+  )
+}
+
+function WorkflowForm({
+  workflow,
+  requirements,
+}: {
+  workflow: Workflow
+  requirements: { kind: string; label: string; hint: string }[]
+}) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState(workflow.name)
+  const [states, setStates] = useState(workflow.states)
+  const save = useMutation({
+    mutationFn: () => saveWorkflow(workflow.key, name, states),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: caseKeys.workflows }),
+  })
+  const update = (i: number, patch: Partial<Workflow['states'][number]>) =>
+    setStates((all) => all.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {workflow.name} <span className="text-muted-foreground">v{workflow.version}</span>
+        </CardTitle>
+        <CardDescription>
+          Saving creates version {workflow.version + 1}. The {workflow.open_cases} open case
+          {workflow.open_cases === 1 ? '' : 's'} on this version keep it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="grid gap-4"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault()
+            save.mutate()
+          }}
+        >
+          <div className="grid gap-1">
+            <Label htmlFor={`wf-name-${workflow.key}`}>Name</Label>
+            <Input
+              id={`wf-name-${workflow.key}`}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <ol className="grid gap-3">
+            {states.map((state, i) => (
+              <li key={i} className="grid gap-2 rounded-md border p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <span className="text-muted-foreground w-5 pb-2 text-sm">{i + 1}</span>
+                  <div className="grid gap-1">
+                    <Label htmlFor={`wf-${workflow.key}-label-${i}`}>Step</Label>
+                    <Input
+                      id={`wf-${workflow.key}-label-${i}`}
+                      value={state.label}
+                      onChange={(event) => update(i, { label: event.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor={`wf-${workflow.key}-key-${i}`}>Key</Label>
+                    <Input
+                      id={`wf-${workflow.key}-key-${i}`}
+                      value={state.key}
+                      className="font-mono"
+                      onChange={(event) => update(i, { key: event.target.value })}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove step ${i + 1}`}
+                    onClick={() => setStates((all) => all.filter((_, j) => j !== i))}
+                    disabled={states.length <= 2}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  <legend className="sr-only">Requirements for step {i + 1}</legend>
+                  {requirements.map((r) => (
+                    <label key={r.kind} className="flex items-center gap-1" title={r.hint}>
+                      <input
+                        type="checkbox"
+                        checked={state.requires.includes(r.kind)}
+                        onChange={(event) =>
+                          update(i, {
+                            requires: event.target.checked
+                              ? [...state.requires, r.kind]
+                              : state.requires.filter((k) => k !== r.kind),
+                          })
+                        }
+                      />
+                      {r.label}
+                    </label>
+                  ))}
+                </fieldset>
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setStates((all) => [
+                  ...all,
+                  { key: `step_${all.length + 1}`, label: 'New step', requires: [] },
+                ])
+              }
+            >
+              <Plus aria-hidden /> Add a step
+            </Button>
+            <Button type="submit" disabled={save.isPending}>
+              Save as a new version
+            </Button>
+          </div>
+          {save.isError ? <p className="text-destructive text-sm">{save.error.message}</p> : null}
+          {save.isSuccess ? (
+            <p role="status" className="text-sm">
+              Saved as version {save.data.version}.
+            </p>
+          ) : null}
         </form>
       </CardContent>
     </Card>

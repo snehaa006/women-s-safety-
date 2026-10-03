@@ -207,6 +207,19 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Goal:** evidence that is provably unaltered, cannot be suppressed, and follows procedure.
 
+**Status (October 2026):** built and live on the Supabase project, with the `evidence` and `anchor` Edge Functions deployed. The first ledger anchor has been stamped by OpenTimestamps. Passkey unlock and envelope encryption moved to P9 (below).
+
+**Built**
+
+- **Vault** (`20261003193622`, `20261003193743`): `evidence_items` and a private Storage bucket (`evidence`, 50 MB per file, path `<owner>/<item>`). The browser hashes the file (Web Crypto SHA-256), `register_evidence` records the hash, size, type, capture time and GPS, the browser uploads to its own path (Storage RLS: only to a registered item, once, never overwritten), and `confirm_evidence_upload` queues a server re-hash. The `evidence` Edge Function downloads the stored file and reports its SHA-256; `finish_evidence_check` seals only on a match (ledger `evidence.sealed`, written by the system with no person or place in it) and otherwise rejects it. Sharing to a report or SOS (`share_evidence`) puts the item on that case; deletion waits 30 days and is impossible once shared.
+- **Cases and workflows** (`20261003193900`): workflows are data (`workflow_definitions`, versioned; open cases keep their version; edited at `/console/admin/workflows`). Requirements: evidence sealed, geofenced site visit (within 200 m), statement, evidence locked, custody complete. `advance_case` moves forward only when every requirement up to the target is met; otherwise nothing changes, the missing requirements come back and `case.advance_blocked` is ledgered.
+- **Signatures, lock and custody:** each officer has a server-held key (HMAC-SHA256; WebAuthn is the upgrade path). Locking needs the investigating officer's and a supervisor's signature. A hand-off is signed by the sender, accepted and signed by the receiver, and the stored file is re-hashed before custody moves; a mismatch stops it.
+- **Anchoring and the verifier** (`20261003194009`): every 10 minutes (Cron) a Merkle root over the new ledger entries; the `anchor` function submits only the 32-byte root to OpenTimestamps calendars and stores the receipt. `verify_evidence` (public) returns the sealing entry, its fields and the Merkle proof, so `/verify` re-checks the payload hash, entry hash and proof in the browser and offers the `.ots` file.
+- **Screens:** `/app/vault`, `/app/vault/:itemId`, `/console/cases`, `/console/cases/:caseId`, `/console/cases/:caseId/evidence/:evidenceId` (checklist ✓ captured, ✓ hashed, ✓ sealed, ✓ signed, ✓ custody, ✓ anchored), `/console/admin/workflows`, `/verify`, `/verify/:sha256`, and "Case and evidence" on the complaint workbench.
+- **Tests:** 115 database tests (13 new), 27 Edge Function tests, 87 frontend tests, and a live smoke test inside a rolled-back transaction.
+
+**Moved to P9:** passkey (WebAuthn) unlock of the vault and before deletion, app-level AES-256-GCM envelope encryption (Storage encrypts at rest today), the e-mail notice on deletion, and Ed25519/WebAuthn signatures instead of server-held HMAC keys.
+
 **Scope**
 
 - **Vault (M9):** capture or upload, browser hashing, direct upload, server re-hash, "Sealed" badge, passkey unlock, envelope encryption, share to report or incident, delayed deletion.
@@ -216,17 +229,28 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Screens:** `/app/vault`, `/app/vault/:itemId`, `/console/cases/:caseId`, `/console/cases/:caseId/evidence/:evidenceId`, `/console/admin/workflows`, `/verify`, `/verify/:sha256`
 
-**Done when**
+**Done when** *(covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] An uploaded file shows "Sealed" with its hash. On `/verify`, the original matches and a copy with one changed byte does not.
-- [ ] Skipping a workflow state returns the list of missing requirements.
-- [ ] Locking needs both the investigating officer's and the supervisor's signature.
-- [ ] The custody chain shows each hand-off with both signatures and a re-verified hash.
-- [ ] Sealed items show an anchor receipt.
+- [x] An uploaded file shows "Sealed" with its hash. On `/verify`, the original matches and a copy with one changed byte does not.
+- [x] Skipping a workflow state returns the list of missing requirements.
+- [x] Locking needs both the investigating officer's and the supervisor's signature.
+- [x] The custody chain shows each hand-off with both signatures and a re-verified hash.
+- [x] Sealed items show an anchor receipt. *(The OpenTimestamps receipt is pending until the calendar commits it to Bitcoin, a few hours later; `ots upgrade` then completes it.)*
 
 ---
 
 ### P5 · Safe Maps & Journey Monitoring
+
+**Status (October 2026):** built and live on the Supabase project, with a seeded red zone on Janpath for the demo.
+
+**Built**
+
+- **Risk cells** (`20261003195914`): a 0.003° grid (about 330 m × 290 m; Supabase has no H3 extension, so a plain grid stands in for H3 resolution 9). An hourly Cron job scores each cell for day and night from complaints (by severity), SOS events and citizens' zone reports, with a 30-day half-life; a signal counts fully in its own period and 30% in the other, poor lighting only at night, and safe points lower the score. Each cell keeps its factors so the map explains why it is red. `risk_map` returns only cells with at least k = 3 signals, never individual reports.
+- **Zone reports** (`report_zone`): poor lighting, isolated, harassment, unsafe crowd, no transport; 20 a day per person.
+- **Safe routes:** walking alternatives from the keyless OSRM foot router (FOSSGIS, OpenStreetMap), scored by `score_routes` (risk exposure along points every 50 m, high and medium cells crossed, safe points within 150 m). When every option crosses a high-risk cell, the app asks again through detour points on either side of the worst cell (the keyless router has no `avoid_polygons`; OpenRouteService can replace it with a key).
+- **Journeys** (`20261003200016`): pings every 15 s, 5 s under active monitoring (a high-risk cell at night). A watchdog job: off the route by more than 150 m for 60 s, or stopped 3 minutes away from a safe point or the destination → "Are you OK?" with the PIN (60 s); no answer, the duress PIN, or 45 s without a ping → an SOS for the person, which alerts the circle with the live link and reaches the station's board. Arrival within 75 m ends the journey.
+- **Screens:** `/app/map` (day/night layer, why areas are red, report a place, Safest vs Fastest with the time difference, start a watched journey), `/app/journeys/:journeyId` (route and path, check-in, demo walk that can stop), risk layer on `/console/map`.
+- **Tests:** 123 database tests (8 new, on a fake clock), 96 frontend tests (9 new), and a live smoke test inside a rolled-back transaction.
 
 **Scope (M11)**
 
@@ -237,11 +261,11 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 
 **Screens:** `/app/map`, `/app/journeys/:journeyId`, risk layer on `/console/map`
 
-**Done when**
+**Done when** *(covered by tests and the live smoke test; they still need a run on the deployed URL)*
 
-- [ ] The map shows day and night risk using aggregated cells only (at least *k* signals per cell).
-- [ ] "Safest" avoids a seeded red zone and shows the time trade-off.
-- [ ] A 3-minute stop triggers a check-in. With no answer, contacts are alerted. With no acknowledgement, an SOS is created.
+- [x] The map shows day and night risk using aggregated cells only (at least *k* signals per cell).
+- [x] "Safest" avoids a seeded red zone and shows the time trade-off.
+- [x] A 3-minute stop triggers a check-in. With no answer, contacts are alerted. With no acknowledgement, an SOS is created. *(The unanswered check-in raises the SOS at once, so contacts get the live link and the station sees it together, a step stricter than contacts-first; the P1 reminder and the P2 ladder then run as for any SOS.)*
 
 ---
 
@@ -305,6 +329,7 @@ P5–P9 are enhancements. **P7's fake call has no dependencies**, so it can be p
 - Anomaly rules and an Isolation Forest, a review queue and a weekly oversight report.
 - Replica store with a daily cross-check job.
 - Retention jobs and a security review.
+- Carried over from P3/P4: key-based encryption of confidential reporter identity, passkey (WebAuthn) vault unlock and step-up signatures, AES-256-GCM envelope encryption of evidence, the e-mail notice on deletion.
 - Load test of the SOS path, accessibility audit, Hindi translation.
 - Optional Capacitor native wrapper for lock-screen and background features.
 

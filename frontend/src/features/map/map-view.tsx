@@ -1,6 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 
-import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
+import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson'
 import {
   Map as MapLibre,
   Marker,
@@ -40,11 +40,55 @@ function dots(points: NonNullable<MapViewProps['points']>): FeatureCollection<Po
   }
 }
 
+function cellShapes(cells: NonNullable<MapViewProps['cells']>): FeatureCollection<Polygon> {
+  return {
+    type: 'FeatureCollection',
+    features: cells.map(({ bounds: [w, s, e, n], level }) => ({
+      type: 'Feature',
+      properties: { level },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [w, s],
+            [e, s],
+            [e, n],
+            [w, n],
+            [w, s],
+          ],
+        ],
+      },
+    })),
+  }
+}
+
+function routeLines(routes: NonNullable<MapViewProps['routes']>): FeatureCollection<LineString> {
+  return {
+    type: 'FeatureCollection',
+    // The selected route last, so it draws on top.
+    features: [...routes]
+      .sort((a, b) => Number(!!a.selected) - Number(!!b.selected))
+      .map((r) => ({
+        type: 'Feature',
+        properties: {
+          color: r.color,
+          width: r.selected ? 6 : 3,
+          opacity: r.selected ? 0.95 : 0.55,
+        },
+        geometry: { type: 'LineString', coordinates: r.coordinates },
+      })),
+  }
+}
+
 export default function MapView({
   path,
   current,
   routePreview,
   points,
+  cells,
+  routes,
+  destination,
+  onPick,
   follow = true,
   className,
   label,
@@ -52,6 +96,11 @@ export default function MapView({
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<MapLibre | null>(null)
   const marker = useRef<Marker | null>(null)
+  const destMarker = useRef<Marker | null>(null)
+  const pick = useRef(onPick)
+  useEffect(() => {
+    pick.current = onPick
+  })
   const ready = useRef(false)
   const apply = useRef<() => void>(() => {})
   const [failed, setFailed] = useState(false)
@@ -76,7 +125,32 @@ export default function MapView({
       return
     }
     instance.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    instance.on('click', (event) =>
+      pick.current?.({ lat: event.lngLat.lat, lng: event.lngLat.lng }),
+    )
     instance.on('load', () => {
+      instance.addSource('cells', { type: 'geojson', data: cellShapes([]) })
+      instance.addLayer({
+        id: 'cells',
+        type: 'fill',
+        source: 'cells',
+        paint: {
+          'fill-color': ['match', ['get', 'level'], 'high', RED, 'medium', '#e8a317', '#9ca3af'],
+          'fill-opacity': 0.35,
+        },
+      })
+      instance.addSource('alternatives', { type: 'geojson', data: routeLines([]) })
+      instance.addLayer({
+        id: 'alternatives',
+        type: 'line',
+        source: 'alternatives',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['get', 'width'],
+          'line-opacity': ['get', 'opacity'],
+        },
+      })
       instance.addSource('route', { type: 'geojson', data: line([]) })
       instance.addLayer({
         id: 'route',
@@ -121,6 +195,7 @@ export default function MapView({
     return () => {
       ready.current = false
       marker.current = null
+      destMarker.current = null
       map.current = null
       instance.remove()
     }
@@ -136,6 +211,20 @@ export default function MapView({
       instance.getSource<GeoJSONSource>('path')?.setData(line(path))
       instance.getSource<GeoJSONSource>('route')?.setData(line(routePreview ?? []))
       instance.getSource<GeoJSONSource>('points')?.setData(dots(points ?? []))
+      instance.getSource<GeoJSONSource>('cells')?.setData(cellShapes(cells ?? []))
+      instance.getSource<GeoJSONSource>('alternatives')?.setData(routeLines(routes ?? []))
+      if (destination) {
+        if (!destMarker.current) {
+          destMarker.current = new Marker({ color: '#2547b8' })
+            .setLngLat([destination.lng, destination.lat])
+            .addTo(instance)
+        } else {
+          destMarker.current.setLngLat([destination.lng, destination.lat])
+        }
+      } else if (destMarker.current) {
+        destMarker.current.remove()
+        destMarker.current = null
+      }
       if (lat === undefined || lng === undefined) return
       if (!marker.current) {
         const dot = document.createElement('div')
@@ -149,7 +238,7 @@ export default function MapView({
       }
     }
     apply.current()
-  }, [path, routePreview, points, lat, lng, follow])
+  }, [path, routePreview, points, cells, routes, destination, lat, lng, follow])
 
   if (failed) {
     return (

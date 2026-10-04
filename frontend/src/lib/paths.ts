@@ -10,6 +10,7 @@ export const paths = {
     sos: (incidentId: string) => `/app/sos/${incidentId}`,
     incident: (incidentId: string) => `/app/incidents/${incidentId}`,
     map: '/app/map',
+    journey: (journeyId: string) => `/app/journeys/${journeyId}`,
     report: '/app/report',
     reports: '/app/reports',
     complaint: (complaintId: string) => `/app/reports/${complaintId}`,

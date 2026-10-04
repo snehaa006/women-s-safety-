@@ -330,6 +330,8 @@ flowchart LR
   E --> R["Replica store<br/>daily cross-check"]
 ```
 
+**As built (P4).** Anchoring runs every 10 minutes (`private.anchor_ledger`, Cron): a Merkle root over at most 5,000 new entry hashes (parent = SHA-256 of the two raw 32-byte children, an odd node paired with itself), stored in `ledger_anchors`. The `anchor` Edge Function sends only that root to an OpenTimestamps calendar (a, b, then eternitywall) and stores the receipt; with the standard header and the root it is a `.ots` file. `verify_evidence(sha256)` is public and returns the sealing entry (written by the system, so it names no person or place), its exact hashed fields and the Merkle proof; `/verify` re-checks all of it in the browser. Officer signatures are HMAC-SHA256 with per-officer server-held keys (`private.signing_keys`), not yet Ed25519; the testnet contract and the replica store are not built.
+
 **Honest framing** (I2 design note): the ledger proves *what was recorded, by whom, and when*, and that it has not changed since. It **does not decide legal compliance**. Admissibility of electronic evidence has to be confirmed with legal advisors.
 
 ---
@@ -489,6 +491,8 @@ flowchart LR
 
   The response is graded: an "Are you OK?" check-in → contacts alerted with the live link → an automatic SOS ([03-workflows.md](03-workflows.md#11-journey-monitoring)).
 
+**As built (P5).** A 0.003° grid replaces H3 (no H3 extension on Supabase); cells are scored hourly from complaints, SOS events and zone reports (OSM `lit=no` and open businesses are not imported yet), and shown only with at least k = 3 signals. Routes come from the keyless OSRM foot router and are scored in the database (`score_routes`); detour points on either side of the worst cell stand in for `avoid_polygons`. Journeys follow the four conditions above with the watchdog as a `journey.check` job; a missed check-in raises the SOS directly (contacts and station together).
+
 ---
 
 ## 11. Evidence vault & custody
@@ -510,9 +514,12 @@ flowchart LR
 | Phone snatched mid-recording | Stealth and emergency recordings upload in 10-second chunks. Each chunk is hashed and sealed as soon as it arrives. |
 | Retention | Emergency audio follows configurable retention limits (I1#9, I2§1), except when it is attached to a case (legal hold). |
 
+**As built (P4).** Steps 1–4 above, with the `evidence` Edge Function doing the re-hash; a mismatch rejects the item and is ledgered (opening an anomaly comes with P9). Files up to 50 MB are hashed whole with Web Crypto (no `hash-wasm` yet). Delayed deletion (30 days, never after sharing) is built; the passkey and the e-mail notice, and envelope encryption, are deferred to P9 — Storage's own encryption at rest applies today.
+
 **Custody (authority side)**
 
 - A **case** follows a configurable procedural workflow (I2§2). Each **evidence item** moves through Registered → Sealed → Locked (2 signatures) → custody transfers → Submitted ([03-workflows.md](03-workflows.md#9-case-procedural-workflow)).
+- **As built (P4):** cases (`open_case` from a complaint or SOS; one open case per complaint), workflow definitions as versioned data with five requirement kinds, `advance_case` returning the missing requirements, the two-signature lock (investigating officer + a supervisor of the station or above), and two-party hand-offs that re-hash the file on acceptance. Signatures are HMAC-SHA256 over the SHA-256 of `purpose|case|evidence|file hash|capacity|signer|transfer|time`, re-verified on every read.
 - **Signatures.** In the Phase 4 MVP each officer has a server-held Ed25519 key that is used only after passkey step-up. Upgrade path: WebAuthn assertions whose challenge is the payload hash, bound to the officer's device and non-repudiable.
 - **Transfers** are two-party handshakes. The sender initiates and signs. The receiver accepts and signs. The system re-hashes the file at acceptance.
 

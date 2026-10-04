@@ -117,6 +117,24 @@ adds an AI review with Google Gemini when you add `GEMINI_API_KEY` (from
 lower it below the rules. Without the key, reports show "Scored by the rules" and nothing else
 changes.
 
+## Evidence vault and verifier
+
+Files added in `/app/vault` are fingerprinted (SHA-256) on the phone, uploaded to the private
+`evidence` Storage bucket, and sealed only when the `evidence` Edge Function's re-hash matches.
+Every 10 minutes the ledger's new entries get a Merkle root that the `anchor` function stamps with
+OpenTimestamps (no key needed). Anyone can check a file at `/verify`: it is hashed in the browser
+and never uploaded. Officers open a case from a complaint ("Case and evidence"), follow the
+workflow (`/console/admin/workflows`), lock evidence with two signatures and hand it over with a
+re-hash.
+
+## Safety map and journeys
+
+`/app/map` shows day and night risk areas (only cells with at least three signals), lets people
+report a place, and plans the safest walking route (OpenStreetMap routes from the FOSSGIS OSRM
+server, no key). A watched journey (`/app/journeys/:id`) asks "Are you OK?" after a 3-minute stop
+or leaving the route, and raises an SOS when nobody answers or the phone goes silent. The demo red
+zone is on Janpath; "Walk the route (demo)" on the journey screen simulates the walk.
+
 ## Demo console
 
 The hosted project has a demo district: the New Delhi District Control Room, four police
